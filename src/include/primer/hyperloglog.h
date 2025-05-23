@@ -1,6 +1,7 @@
 #pragma once
 
 #include <bitset>
+#include <cstdint>
 #include <memory>
 #include <mutex>  // NOLINT
 #include <string>
@@ -34,7 +35,7 @@ class HyperLogLog {
   auto GetCardinality() { return cardinality_; }
 
   /**
-   * @brief Adds a value into the HyperLogLog.
+   * @brief Ddds a value into the HyperLogLog.
    *
    * @param[in] val - value that's added into hyperloglog
    */
@@ -81,6 +82,10 @@ class HyperLogLog {
 
   /** @brief Cardinality value. */
   size_t cardinality_;
+
+  std::vector<uint64_t> bucket_;
+
+  uint16_t n_bits_;
 
   /** @todo (student) can add their data structures that support HyperLogLog */
 };

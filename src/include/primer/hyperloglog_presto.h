@@ -1,6 +1,7 @@
 #pragma once
 
 #include <bitset>
+#include <cstdint>
 #include <memory>
 #include <mutex>  // NOLINT
 #include <sstream>
@@ -10,6 +11,7 @@
 #include <vector>
 
 #include "common/util/hash_util.h"
+#include "type/value.h"
 
 /** @brief Dense bucket size. */
 #define DENSE_BUCKET_SIZE 4
@@ -81,7 +83,7 @@ class HyperLogLogPresto {
 
   /** @brief Storing cardinality value */
   uint64_t cardinality_;
-
+  uint64_t nbits_;
   // TODO(student) - can add more data structures as required
 };
 
