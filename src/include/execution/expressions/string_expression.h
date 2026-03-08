@@ -45,10 +45,22 @@ class StringExpression : public AbstractExpression {
     }
   }
 
-  auto Compute(const std::string &val) const -> std::string {
-    // TODO(student): implement upper / lower.
-    return {};
+ auto Compute(const std::string &val) const -> std::string {
+  std::string res = val;  // 拷贝一份，改这份
+  for (auto &ch : res) {
+    switch (expr_type_) {
+      case StringExpressionType::Upper:
+        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+        break;
+      case StringExpressionType::Lower:
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        break;
+      default:
+        throw Exception(fmt::format("unsupported string expression type {}", expr_type_));
+    }
   }
+  return res;
+}
 
   auto Evaluate(const Tuple *tuple, const Schema &schema) const -> Value override {
     Value val = GetChildAt(0)->Evaluate(tuple, schema);
@@ -62,7 +74,6 @@ class StringExpression : public AbstractExpression {
     auto str = val.GetAs<char *>();
     return ValueFactory::GetVarcharValue(Compute(str));
   }
-
   /** @return the string representation of the expression node and its children */
   auto ToString() const -> std::string override { return fmt::format("{}({})", expr_type_, *GetChildAt(0)); }
 

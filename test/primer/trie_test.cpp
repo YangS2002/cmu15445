@@ -14,6 +14,12 @@ namespace bustub {
 
 TEST(TrieTest, ConstructorTest) { auto trie = Trie(); }
 
+TEST(TrieTest, EmptyGetTest) {
+  auto trie = Trie();
+  trie = trie.Put<std::string>("", "empty-key");
+  ASSERT_EQ(*trie.Get<std::string>(""), "empty-key");
+}
+
 TEST(TrieTest, BasicPutTest) {
   auto trie = Trie();
   trie = trie.Put<uint32_t>("test-int", 233);

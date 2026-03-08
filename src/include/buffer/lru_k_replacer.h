@@ -18,7 +18,8 @@
 #include <optional>
 #include <unordered_map>
 #include <vector>
-
+#include "fmt/format.h"
+#include "common/exception.h"
 #include "common/config.h"
 #include "common/macros.h"
 
@@ -31,10 +32,41 @@ class LRUKNode {
   /** History of last seen K timestamps of this page. Least recent timestamp stored in front. */
   // Remove maybe_unused if you start using them. Feel free to change the member variables as you want.
 
-  [[maybe_unused]] std::list<size_t> history_;
-  [[maybe_unused]] size_t k_;
-  [[maybe_unused]] frame_id_t fid_;
-  [[maybe_unused]] bool is_evictable_{false};
+  std::list<size_t> history_; // 存储访问的时间戳, 越靠后的时间越早, front是最近访问的时间戳，back是最早访问的时间戳
+  size_t k_;
+  frame_id_t fid_;
+  bool is_evictable_{false};
+  public:
+    LRUKNode(frame_id_t fid, size_t k)  {k_=k;fid_=fid;is_evictable_=false;} // 注意[] 会调用默认构造函数，导致k_没有被正确初始化
+                                                                              // 没写默认构造函数，所以不能使用[]来创建LRUKNode对象
+    void PopFront(){
+        history_.pop_front();
+    }
+    void PushBack(size_t timestamp){
+        history_.push_back(timestamp);
+    }
+    void PopBack(){
+        history_.pop_back();
+    }
+    void PushFront(size_t timestamp){
+        history_.push_front(timestamp);
+    }
+    auto Getback() -> size_t {
+      if(history_.size() ==0 ){
+        throw Exception(fmt::format("frame {} has no history\n", fid_));
+      }
+      return history_.back();
+    }
+    auto GetHitorySize() -> size_t {
+      return history_.size();
+    }
+     auto IsEvictable() -> bool {
+      return is_evictable_;
+    }
+     void SetEvictable(bool evictable) {
+      is_evictable_ = evictable;
+    }
+
 };
 
 /**
@@ -151,10 +183,11 @@ class LRUKReplacer {
  private:
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
-  [[maybe_unused]] std::unordered_map<frame_id_t, LRUKNode> node_store_;
-  [[maybe_unused]] size_t current_timestamp_{0};
-  [[maybe_unused]] size_t curr_size_{0};
-  [[maybe_unused]] size_t replacer_size_;
+  std::unordered_map<frame_id_t, LRUKNode> node_store_; // 存储frame_id和对应的LRUKNode
+  std::unordered_map<frame_id_t,LRUKNode> node_candidate_; // 存储所有的candidate node
+  size_t current_timestamp_{0}; // 当前的时间戳，当访问一个frame时，时间戳加1
+  size_t curr_size_{0};
+  size_t replacer_size_;
   [[maybe_unused]] size_t k_;
   [[maybe_unused]] std::mutex latch_;
 };
