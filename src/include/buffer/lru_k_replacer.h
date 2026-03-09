@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <limits>
 #include <list>
 #include <mutex>  // NOLINT
@@ -25,7 +26,7 @@
 
 namespace bustub {
 
-enum class AccessType { Unknown = 0, Lookup, Scan, Index };
+enum class AccessType : std::uint8_t { Unknown = 0, Lookup, Scan, Index };
 
 class LRUKNode {
  private:
@@ -37,7 +38,7 @@ class LRUKNode {
   frame_id_t fid_;
   bool is_evictable_{false};
   public:
-    LRUKNode(frame_id_t fid, size_t k)  {k_=k;fid_=fid;is_evictable_=false;} // 注意[] 会调用默认构造函数，导致k_没有被正确初始化
+    LRUKNode(frame_id_t fid, size_t k)  {k_=k;fid_=fid;is_evictable_=true;} // 注意[] 会调用默认构造函数，导致k_没有被正确初始化
                                                                               // 没写默认构造函数，所以不能使用[]来创建LRUKNode对象
     void PopFront(){
         history_.pop_front();
@@ -52,7 +53,7 @@ class LRUKNode {
         history_.push_front(timestamp);
     }
     auto Getback() -> size_t {
-      if(history_.size() ==0 ){
+      if(history_.empty()){
         throw Exception(fmt::format("frame {} has no history\n", fid_));
       }
       return history_.back();
@@ -184,9 +185,8 @@ class LRUKReplacer {
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
   std::unordered_map<frame_id_t, LRUKNode> node_store_; // 存储frame_id和对应的LRUKNode
-  std::unordered_map<frame_id_t,LRUKNode> node_candidate_; // 存储所有的candidate node
   size_t current_timestamp_{0}; // 当前的时间戳，当访问一个frame时，时间戳加1
-  size_t curr_size_{0};
+  [[maybe_unused]] size_t curr_size_{0};
   size_t replacer_size_;
   [[maybe_unused]] size_t k_;
   [[maybe_unused]] std::mutex latch_;

@@ -11,6 +11,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/lru_k_replacer.h"
+#include <cstddef>
+#include <cstdint>
+#include "common/config.h"
+#include "common/exception.h"
+#include "type/limits.h"
 
 namespace bustub {
 
@@ -19,94 +24,109 @@ LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_fra
 }
 
 auto LRUKReplacer::Evict() -> std::optional<frame_id_t> { 
-    // 逐出
-    // 首先从候选列表中找到访问历史中第一次访问最早的节点,按先进先出FIFO淘汰
-    // 没有则从真正的LRU列表中找到访问历史中倒数第k次最早的节点
-    if(!node_candidate_.empty()){
-        if(!node_candidate_.empty()){
-            size_t max_dis = -1;
-            size_t target_frame_id = -1;
-            auto iter = node_candidate_.begin();
-            while (iter != node_candidate_.end()) {
-                if(iter->second.Getback()<max_dis){
-                    max_dis = iter->second.Getback();
-                    target_frame_id = iter->first;
+    // 逐出可以逐出的节点
+    auto iter = node_store_.begin();
+    size_t max_distance = 0;
+    frame_id_t target_frame = -1;
+    if(node_store_.empty()){
+        return std::nullopt;
+    }
+    while (iter!=node_store_.end()) {
+        if(iter->second.IsEvictable()){
+            // 计算距离
+            if(iter->second.GetHitorySize() < k_){
+                // 视为无穷大
+                // 根据LRU原则，选择最早访问的那个节点
+                max_distance = BUSTUB_INT32_MAX;
+                if(target_frame!=-1){
+                    if(node_store_.find(target_frame) == node_store_.end()){
+                        throw Exception(fmt::format("target frame {} is not found\n", target_frame));
+                    }
+                    if(iter->second.Getback() < node_store_.find(target_frame)->second.Getback()){
+                        target_frame = iter->first;
+                    }
                 }
-                iter++;
+                else{
+                    target_frame = iter->first;
+                }
             }
-            node_candidate_.erase(target_frame_id);
-        }
-        else {
-            throw Exception("no frame can be evicted\n");
-            
-        }
-    }
-    else if(!node_store_.empty()){
-        // 在候选节点中，找到访问历史中第一次访问最早的节点
-        size_t earliest_time = -1; // 最小
-        size_t target_frame_id = -1;
-        auto iter = node_store_.begin();
-        while (iter != node_store_.end()) {
-            if(iter->second.Getback()<earliest_time){
-                earliest_time = iter->second.Getback();
-                target_frame_id = iter->first;
+            else {
+                // 计算距离
+                size_t distance = current_timestamp_ - iter->second.Getback();
+                if(distance>max_distance){
+                    target_frame = iter->first;
+                    max_distance = distance;
+                }
             }
-            iter++;
         }
-        node_store_.erase(target_frame_id);
+        iter ++ ;
     }
-    else{
-        throw Exception("candidate node and real node are both not empty, should not happen\n");
+    if(target_frame == -1){
+        return std::nullopt;
     }
-    return std::nullopt;
+    curr_size_--;
+    node_store_.erase(target_frame);
+    return target_frame;
     }
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType access_type) {
-    auto iter = node_candidate_.find(frame_id) ;
-    if(iter != node_candidate_.end()){
-        // 在候选节点中，更新访问历史
-        auto &node = node_candidate_.find(frame_id)->second;
-        if(node.GetHitorySize() == k_-1){ // 
-            node.PopBack(); // 超过k次，弹出，并进入真正的LRU列表
-            node.PushFront(current_timestamp_);
-            if(node_store_.size() + node_candidate_.size() == replacer_size_){
-                // 逐出
-                Evict();
-            }
-            auto nh = node_candidate_.extract(iter);
-            node_store_.insert(std::move(nh)); // 移动到真正的LRU列表
-        }
-        else{
-            node.PushFront(current_timestamp_);
+    // 访问某个帧，更新这个帧对应的访问历史
+    // 注意，该操作不自行逐出帧
+    auto iter = node_store_.find(frame_id);
+    if(iter != node_store_.end()){
+        // 已经存在这个帧了，更新访问历史
+        iter->second.PushFront(current_timestamp_);
+        if(iter->second.GetHitorySize() > k_){
+            iter->second.PopBack();
         }
     }
-    else{
-        // 不在候选节点中
-        // 检查是否在真正的LRU列表中
-        auto iter2 = node_store_.find(frame_id);
-        if(iter2 == node_store_.end()){
-            // 不在真正的LRU列表中，说明是第一次访问，加入候选节点
-            if(node_candidate_.size() + node_store_.size() == replacer_size_){
-                //缓存行满，逐出
-                Evict();
-            }
-            node_candidate_.emplace(frame_id, LRUKNode(frame_id, k_));
-            node_candidate_.find(frame_id)->second.PushFront(current_timestamp_);   
+    else {
+        // 插入一个帧到LRUKreplacer
+        if(node_store_.size() >= replacer_size_){
+            throw Exception(fmt::format("LRUKReplacer rest space is zero\n", replacer_size_));
         }
-        else{
-            // 在真正的LRU列表中，更新访问历史
-            node_store_.find(frame_id)->second.PushFront(current_timestamp_);
-            node_store_.find(frame_id)->second.PopBack();
-        }
+        LRUKNode node(frame_id, k_);
+        node.PushFront(current_timestamp_);
+        node_store_.insert({frame_id,node});
+        curr_size_++;
     }
+    
     current_timestamp_++;
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
+    // 将某个帧设置为不可逐出（可能在写日志等操作）
+    auto iter = node_store_.find(frame_id);
+    if(iter != node_store_.end()){
+        if(iter->second.IsEvictable() && !set_evictable){
+            curr_size_--;
+        }
+        else if(!iter->second.IsEvictable() && set_evictable){
+            curr_size_++;
+        }
+        iter->second.SetEvictable(set_evictable);
+    }
+    // else{
+    //     throw  Exception(fmt::format("frame id {} is not found\n", frame_id));
+    // }   
 }
 
-void LRUKReplacer::Remove(frame_id_t frame_id) {}
+void LRUKReplacer::Remove(frame_id_t frame_id) {
+    // 删除对应的帧，这个方法仅仅在bufferpoolmanager删除某个页面时执行
+   auto iter = node_store_.find(frame_id);
+   if(iter != node_store_.end()){
+    if(iter->second.IsEvictable()){
+        curr_size_--;
+    }
+    node_store_.erase(iter);
+   }
+   else{
+    throw  Exception(fmt::format("frame id{} is not found\n", frame_id));
+   }
+}
 
-auto LRUKReplacer::Size() -> size_t { return curr_size_; }
+auto LRUKReplacer::Size() -> size_t { 
+    return curr_size_;
+}
 
 }  // namespace bustub
