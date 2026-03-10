@@ -31,15 +31,16 @@ auto Planner::GetFuncCallFromFactory(const std::string &func_name, std::vector<A
   // 2. verify the number of args (should be 1), refer to the test cases for when you should throw an `Exception`.
   // 3. return a `StringExpression` std::shared_ptr.
   // throw Exception(fmt::format("func call {} not supported in planner yet", func_name));
-  if(args.size()>1 || args.size() == 0) {
-    throw Exception(fmt::format("func call {} should have exactly 1 argument but have {}\n", func_name,args.size()));
+  if (args.size() > 1 || args.size() == 0) {
+    throw Exception(fmt::format("func call {} should have exactly 1 argument but have {}\n", func_name, args.size()));
   }
 
-  if(args[0]->GetReturnType().GetType()!=TypeId::VARCHAR) {
-    throw Exception(fmt::format("func call {} has invalid argument type {}\n", func_name,args[0]->GetReturnType().ToString()));
+  if (args[0]->GetReturnType().GetType() != TypeId::VARCHAR) {
+    throw Exception(
+        fmt::format("func call {} has invalid argument type {}\n", func_name, args[0]->GetReturnType().ToString()));
   }
-  auto stringexpressing = StringExpression(args[0], 
-  func_name == "lower" ? StringExpressionType::Lower : StringExpressionType::Upper);
+  auto stringexpressing =
+      StringExpression(args[0], func_name == "lower" ? StringExpressionType::Lower : StringExpressionType::Upper);
   return std::make_shared<StringExpression>(stringexpressing);
 }
 

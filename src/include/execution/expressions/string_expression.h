@@ -45,22 +45,22 @@ class StringExpression : public AbstractExpression {
     }
   }
 
- auto Compute(const std::string &val) const -> std::string {
-  std::string res = val;  // 拷贝一份，改这份
-  for (auto &ch : res) {
-    switch (expr_type_) {
-      case StringExpressionType::Upper:
-        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-        break;
-      case StringExpressionType::Lower:
-        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-        break;
-      default:
-        throw Exception(fmt::format("unsupported string expression type {}", expr_type_));
+  auto Compute(const std::string &val) const -> std::string {
+    std::string res = val;  // 拷贝一份，改这份
+    for (auto &ch : res) {
+      switch (expr_type_) {
+        case StringExpressionType::Upper:
+          ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+          break;
+        case StringExpressionType::Lower:
+          ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+          break;
+        default:
+          throw Exception(fmt::format("unsupported string expression type {}", expr_type_));
+      }
     }
+    return res;
   }
-  return res;
-}
 
   auto Evaluate(const Tuple *tuple, const Schema &schema) const -> Value override {
     Value val = GetChildAt(0)->Evaluate(tuple, schema);

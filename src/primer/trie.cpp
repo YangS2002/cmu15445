@@ -77,17 +77,16 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
   int i = 0;
   while (i < static_cast<int>(key.size())) {
     auto iter = cur_node->children_.find(key[i]);
-    if(iter != cur_node->children_.end()){
+    if (iter != cur_node->children_.end()) {
       // 有节点,复制旧节点
       cur_node = cur_node->children_[key[i]]->Clone();
-    }
-    else{
+    } else {
       // 没有新节点，创建新节点
       cur_node = std::make_shared<TrieNode>();
     }
-    if(i == static_cast<int>(key.size())-1){
+    if (i == static_cast<int>(key.size()) - 1) {
       // 最后一个节点，将当前节点转化为值节点
-      cur_node = std::make_shared<TrieNodeWithValue<T>>(cur_node->children_,value_ptr);
+      cur_node = std::make_shared<TrieNodeWithValue<T>>(cur_node->children_, value_ptr);
     }
     path.push_back(cur_node);
     i++;
@@ -95,14 +94,14 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
 
   // 回溯路径
   i = 0;
-  for(;i<static_cast<int>(key.size());i++){
-    if(i == 0){
+  for (; i < static_cast<int>(key.size()); i++) {
+    if (i == 0) {
       // 根节点
       new_root = path[i];
     }
-      // 非根节点，连接父节点和当前节点
-      // 最后一个节点不管，因为它是值节点，不会有子节点了
-    path[i]->children_[key[i]] = path[i+1];
+    // 非根节点，连接父节点和当前节点
+    // 最后一个节点不管，因为它是值节点，不会有子节点了
+    path[i]->children_[key[i]] = path[i + 1];
   }
 
   return Trie(new_root);
@@ -126,7 +125,7 @@ auto Trie::Remove(std::string_view key) const -> Trie {
         new_node->children_ = root_->children_;
         new_root = new_node;
       }
-    } 
+    }
     return Trie(new_root);
   }
   std::vector<std::shared_ptr<const TrieNode>> path;  // 存储路径上的节点
@@ -147,32 +146,30 @@ auto Trie::Remove(std::string_view key) const -> Trie {
     return Trie(root_);
   }
   for (int i = key.size(); i >= 0; i--) {
-      // 写时复制，用于在并发情况下，写新的节点不会影响正在读取的旧节点 //         特别注意这一点
-    auto unique_clonenode = path[i]->Clone();  // 复制的节点
+    // 写时复制，用于在并发情况下，写新的节点不会影响正在读取的旧节点 //         特别注意这一点
+    auto unique_clonenode = path[i]->Clone();                                  // 复制的节点
     auto clone_node = std::shared_ptr<TrieNode>(std::move(unique_clonenode));  // 新生成的节点要是可修改的
-    if(i == static_cast<int>(key.size())){
+    if (i == static_cast<int>(key.size())) {
       // 当前路径的最后节点
       // 一定是目标键的带值节点，转化为普通节点
       clone_node = std::make_shared<TrieNode>(clone_node->children_);
-    }
-    else{
+    } else {
       // 非最后节点，需要删除对应的子节点
       auto iter = clone_node->children_.find(key[i]);
-      if(iter != clone_node->children_.end() && path[i+1] == nullptr){
-       clone_node->children_.erase(iter->first);
+      if (iter != clone_node->children_.end() && path[i + 1] == nullptr) {
+        clone_node->children_.erase(iter->first);
       }
     }
-    if(clone_node->children_.empty()&&!clone_node->is_value_node_){
+    if (clone_node->children_.empty() && !clone_node->is_value_node_) {
       // 当前节点没有子节点了，并且不是值节点了，说明这个节点也要删除
       // 如果是其他键的值节点，不会进入这个逻辑。
       clone_node = nullptr;
     }
-    if(clone_node!=nullptr && i<static_cast<int>(key.size()) && path[i+1]!=nullptr){
+    if (clone_node != nullptr && i < static_cast<int>(key.size()) && path[i + 1] != nullptr) {
       // 当前节点不需要删除，并且不是最后一个节点，需要连接当前节点和下一个节点
-      clone_node->children_[key[i]] = path[i+1];
+      clone_node->children_[key[i]] = path[i + 1];
     }
     path[i] = clone_node;
-    
   }
 
   return Trie(path[0]);

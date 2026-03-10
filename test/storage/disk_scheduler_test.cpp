@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "storage/disk/disk_scheduler.h"
 #include <cstring>
 #include <future>  // NOLINT
 #include <memory>
@@ -17,7 +18,6 @@
 #include "common/exception.h"
 #include "gtest/gtest.h"
 #include "storage/disk/disk_manager_memory.h"
-#include "storage/disk/disk_scheduler.h"
 
 namespace bustub {
 
@@ -51,9 +51,9 @@ TEST(DiskSchedulerTest, ScheduleWriteReadPageTest) {
 
 // NOLINTNEXTLINE
 TEST(DiskSchedulerTest, ConcurrentScheduleWriteThenReadTest) {
-   int k_threads = 1000;
-   int k_pages_per_thread = 16;
-   int k_total = k_threads * k_pages_per_thread;
+  int k_threads = 1000;
+  int k_pages_per_thread = 16;
+  int k_total = k_threads * k_pages_per_thread;
 
   auto dm = std::make_unique<DiskManagerUnlimitedMemory>();
   auto disk_scheduler = std::make_unique<DiskScheduler>(dm.get());
@@ -72,11 +72,11 @@ TEST(DiskSchedulerTest, ConcurrentScheduleWriteThenReadTest) {
   for (int t = 0; t < k_threads; t++) {
     threads.emplace_back([&, t] {
       for (int i = 0; i < k_pages_per_thread; i++) {
-        const int idx = (t * k_pages_per_thread )+ i;
+        const int idx = (t * k_pages_per_thread) + i;
         auto pid = static_cast<page_id_t>(idx);
 
         // Fill page with a deterministic pattern.
-        std::memset(write_bufs[idx].data(), '1' , BUSTUB_PAGE_SIZE);
+        std::memset(write_bufs[idx].data(), '1', BUSTUB_PAGE_SIZE);
         std::snprintf(write_bufs[idx].data(), BUSTUB_PAGE_SIZE, "thread=%d idx=%d pid=%d", t, idx, pid);
 
         auto p = disk_scheduler->CreatePromise();
@@ -94,8 +94,7 @@ TEST(DiskSchedulerTest, ConcurrentScheduleWriteThenReadTest) {
           write_futures.emplace_back(std::move(f));
         }
 
-        disk_scheduler->Schedule(
-            {/*is_write=*/true, write_bufs[idx].data(), /*page_id=*/pid, std::move(p)});
+        disk_scheduler->Schedule({/*is_write=*/true, write_bufs[idx].data(), /*page_id=*/pid, std::move(p)});
       }
     });
   }
@@ -131,8 +130,7 @@ TEST(DiskSchedulerTest, ConcurrentScheduleWriteThenReadTest) {
           read_futures.emplace_back(std::move(f));
         }
 
-        disk_scheduler->Schedule(
-            {/*is_write=*/false, read_bufs[idx].data(), /*page_id=*/pid, std::move(p)});
+        disk_scheduler->Schedule({/*is_write=*/false, read_bufs[idx].data(), /*page_id=*/pid, std::move(p)});
       }
     });
   }
