@@ -122,8 +122,11 @@ class BufferPoolManager {
   auto WritePage(page_id_t page_id, AccessType access_type = AccessType::Unknown) -> WritePageGuard;
   auto ReadPage(page_id_t page_id, AccessType access_type = AccessType::Unknown) -> ReadPageGuard;
   auto FlushPage(page_id_t page_id) -> bool;
+  void WRData(bool is_write, page_id_t page_id, frame_id_t frame_id);
   void FlushAllPages();
   auto GetPinCount(page_id_t page_id) -> std::optional<size_t>;
+
+  auto FindFid() -> std::optional<frame_id_t>;
 
  private:
   /** @brief The number of frames in the buffer pool. */
@@ -154,6 +157,7 @@ class BufferPoolManager {
   /** @brief A pointer to the disk scheduler. */
   std::unique_ptr<DiskScheduler> disk_scheduler_;
 
+  std::unordered_map<frame_id_t, page_id_t> pages_;
   /**
    * @brief A pointer to the log manager.
    *

@@ -106,12 +106,14 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
 }
 
 void LRUKReplacer::Remove(frame_id_t frame_id) {
-  // 删除对应的帧，这个方法仅仅在bufferpoolmanager删除某个页面时执行
+  // 删除对应的帧，如果删除到一个不可逐出的帧，抛出异常
   std::lock_guard<std::mutex> lock(latch_);
   auto iter = node_store_.find(frame_id);
   if (iter != node_store_.end()) {
     if (iter->second.IsEvictable()) {
       curr_size_--;
+    } else {
+      throw Exception(fmt::format("frame {} is non-evictable, cannot be removed by LRUKReplacer\n", frame_id));
     }
     node_store_.erase(frame_id);
   }
@@ -119,7 +121,7 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
   //   throw Exception(fmt::format("exception frame id {} is not found\n", frame_id));
   // }
 }
-
+// 可逐出的数量
 auto LRUKReplacer::Size() -> size_t {
   std::lock_guard<std::mutex> lock(latch_);
   return curr_size_;

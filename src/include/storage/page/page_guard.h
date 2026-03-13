@@ -15,6 +15,7 @@
 #include <memory>
 
 #include "buffer/buffer_pool_manager.h"
+#include "common/config.h"
 #include "storage/page/page.h"
 
 namespace bustub {

@@ -27,7 +27,7 @@ const size_t FRAMES = 10;
 // Note that this test assumes you are using the an LRU-K replacement policy.
 const size_t K_DIST = 5;
 
-TEST(BufferPoolManagerTest, DISABLED_VeryBasicTest) {
+TEST(BufferPoolManagerTest, VeryBasicTest) {
   // A very basic test.
 
   auto disk_manager = std::make_shared<DiskManager>(db_fname);
@@ -62,7 +62,7 @@ TEST(BufferPoolManagerTest, DISABLED_VeryBasicTest) {
   ASSERT_TRUE(bpm->DeletePage(pid));
 }
 
-TEST(BufferPoolManagerTest, DISABLED_PagePinEasyTest) {
+TEST(BufferPoolManagerTest, PagePinEasyTest) {
   auto disk_manager = std::make_shared<DiskManager>(db_fname);
   auto bpm = std::make_shared<BufferPoolManager>(2, disk_manager.get(), 5);
 
@@ -157,7 +157,7 @@ TEST(BufferPoolManagerTest, DISABLED_PagePinEasyTest) {
   remove(disk_manager->GetLogFileName());
 }
 
-TEST(BufferPoolManagerTest, DISABLED_PagePinMediumTest) {
+TEST(BufferPoolManagerTest, PagePinMediumTest) {
   auto disk_manager = std::make_shared<DiskManager>(db_fname);
   auto bpm = std::make_shared<BufferPoolManager>(FRAMES, disk_manager.get(), K_DIST);
 
@@ -180,7 +180,8 @@ TEST(BufferPoolManagerTest, DISABLED_PagePinMediumTest) {
     auto page = bpm->WritePage(pid);
     pages.push_back(std::move(page));
   }
-
+  auto fail = bpm->CheckedWritePage(pid0);
+  ASSERT_FALSE(fail.has_value());
   // Scenario: All of the pin counts should be 1.
   for (const auto &page : pages) {
     auto pid = page.GetPageId();
@@ -227,15 +228,15 @@ TEST(BufferPoolManagerTest, DISABLED_PagePinMediumTest) {
   auto last_pid = bpm->NewPage();
   auto last_page = bpm->ReadPage(last_pid);
 
-  auto fail = bpm->CheckedReadPage(pid0);
-  ASSERT_FALSE(fail.has_value());
+  auto test = bpm->CheckedReadPage(pid0);
+  ASSERT_FALSE(test.has_value());
 
   // Shutdown the disk manager and remove the temporary file we created.
   disk_manager->ShutDown();
   remove(db_fname);
 }
 
-TEST(BufferPoolManagerTest, DISABLED_PageAccessTest) {
+TEST(BufferPoolManagerTest, PageAccessTest) {
   const size_t rounds = 50;
 
   auto disk_manager = std::make_shared<DiskManager>(db_fname);
@@ -273,7 +274,7 @@ TEST(BufferPoolManagerTest, DISABLED_PageAccessTest) {
   thread.join();
 }
 
-TEST(BufferPoolManagerTest, DISABLED_ContentionTest) {
+TEST(BufferPoolManagerTest, ContentionTest) {
   auto disk_manager = std::make_shared<DiskManager>(db_fname);
   auto bpm = std::make_shared<BufferPoolManager>(FRAMES, disk_manager.get(), K_DIST);
 
@@ -315,7 +316,10 @@ TEST(BufferPoolManagerTest, DISABLED_ContentionTest) {
   thread1.join();
 }
 
-TEST(BufferPoolManagerTest, DISABLED_DeadlockTest) {
+TEST(BufferPoolManagerTest, DeadlockTest) {
+  // 如果先上全局锁，再上局部锁，由于局部锁的粒度更细，且在拿到局部锁，。
+  // 如果在这之前某个线程在这个时候拿到了全局锁，等待主线程的写锁，而主线程可能还会调用其他的方法获取全局锁（例如修改manager的元数据），
+  // 主线程就会等待全局锁 此时就会陷入死锁。
   auto disk_manager = std::make_shared<DiskManager>(db_fname);
   auto bpm = std::make_shared<BufferPoolManager>(FRAMES, disk_manager.get(), K_DIST);
 
@@ -332,11 +336,11 @@ TEST(BufferPoolManagerTest, DISABLED_DeadlockTest) {
     start.store(true);
 
     // Attempt to write to page 0.
-    auto guard0 = bpm->WritePage(pid0);
+    auto guard0 = bpm->WritePage(pid0);  // 等待 主线程释放pid0的写锁
   });
 
   // Wait for the other thread to begin before we start the test.
-  while (!start.load()) {
+  while (!start.load()) {  // 等待子线程将start修改为true
   }
 
   // Make the other thread wait for a bit.
@@ -347,7 +351,7 @@ TEST(BufferPoolManagerTest, DISABLED_DeadlockTest) {
   // Think about what might happen if you hold a certain "all-encompassing" latch for too long...
 
   // While holding page 0, take the latch on page 1.
-  auto guard1 = bpm->WritePage(pid1);
+  auto guard1 = bpm->WritePage(pid1);  // 等待 子线程释放pid0的写锁
 
   // Let the child thread have the page 0 since we're done with it.
   guard0.Drop();
@@ -355,7 +359,7 @@ TEST(BufferPoolManagerTest, DISABLED_DeadlockTest) {
   child.join();
 }
 
-TEST(BufferPoolManagerTest, DISABLED_EvictableTest) {
+TEST(BufferPoolManagerTest, EvictableTest) {
   // Test if the evictable status of a frame is always correct.
   size_t rounds = 1000;
   size_t num_readers = 8;
