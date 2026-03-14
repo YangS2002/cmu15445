@@ -129,13 +129,14 @@ class BufferPoolManager {
   void WRData(bool is_write, page_id_t page_id, frame_id_t frame_id);
   void FlushAllPages();
   auto GetPinCount(page_id_t page_id) -> std::optional<size_t>;
-
+  void WaitUntilPageNotInIOLocked(std::unique_lock<std::mutex> &lock, page_id_t page_id);
+  auto GetAvailableFrameLocked() -> std::optional<frame_id_t>;
   auto FindFid() -> std::optional<frame_id_t>;
 
  private:
   /** @brief The number of frames in the buffer pool. */
   const size_t num_frames_;
-
+  enum class PageIOState { LOADING, FLUSHING };
   /** @brief The next page ID to be allocated.  */
   std::atomic<page_id_t> next_page_id_;
 
@@ -160,7 +161,7 @@ class BufferPoolManager {
 
   /** @brief A pointer to the disk scheduler. */
   std::unique_ptr<DiskScheduler> disk_scheduler_;
-  std::unordered_set<page_id_t> io_page_;
+  std::unordered_map<page_id_t, PageIOState> page_io_;
   std::condition_variable cv_;
   std::unordered_map<frame_id_t, page_id_t> pages_;
   /**

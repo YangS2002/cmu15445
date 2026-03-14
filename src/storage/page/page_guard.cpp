@@ -197,7 +197,6 @@ WritePageGuard::WritePageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> f
   frame_->rwlatch_.lock();
 
   is_valid_ = true;
-  frame_->is_dirty_ = true;
 }
 
 /**
@@ -284,6 +283,7 @@ auto WritePageGuard::GetData() const -> const char * {
  */
 auto WritePageGuard::GetDataMut() -> char * {
   BUSTUB_ENSURE(is_valid_, "tried to use an invalid write guard");
+  frame_->is_dirty_ = true;
   return frame_->GetDataMut();
 }
 
@@ -310,9 +310,6 @@ void WritePageGuard::Drop() {
   // UNIMPLEMENTED("TODO(P1): Add implementation.");
   if (is_valid_) {
     // 持有全局锁
-    if (frame_ == nullptr) {
-      return;
-    }
     // 如果先解局部锁。可能其他线程等待写锁，和本线程竞争全局锁，导致混乱
     // 所以应该先unpin在解局部锁
     {
