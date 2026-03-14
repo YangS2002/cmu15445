@@ -134,55 +134,6 @@ auto BufferPoolManager::Size() const -> size_t { return num_frames_; }
 auto BufferPoolManager::NewPage() -> page_id_t {
   // UNIMPLEMENTED("TODO(P1): Add implementation.");
   bpm_latch_->lock();
-  // auto new_frame_id = INVALID_FRAME_ID;
-  // if (free_frames_.empty()) {
-  //   // 尝试逐出
-  //   auto frame_id_opt = replacer_->Evict();
-  //   if (frame_id_opt.has_value()) {
-  //     // 有可用帧
-  //     // 此帧的pin一定为0
-  //     // 先删除映射，然后调用无锁的EvictandFlush
-  //     new_frame_id = frame_id_opt.value();
-  //     auto iter = pages_.find(new_frame_id);
-  //     if (iter == pages_.end()) {
-  //       // 没有找到对应的页号
-  //       throw Exception(fmt::format("Cannot find page id for frame {} in Buffer Pool Manager.\n", new_frame_id));
-  //     }
-  //     auto old_page_id = iter->second;
-  //     page_table_.erase(old_page_id);
-  //     pages_.erase(frame_id_opt.value());
-  //     // 从页表中摘除后，不在缓存中，不加入free_frames_, 该帧永远也不会被访问或修改。
-  //     // 所以可以解全局锁
-  //     // 刷写到磁盘
-  //     bpm_latch_->unlock();
-  //     WRData(true, old_page_id, frame_id_opt.value());
-  //     // 重新获取锁
-  //     bpm_latch_->lock();
-  //     frames_[frame_id_opt.value()]->Reset();  // 刷新旧帧
-  //     new_frame_id = frame_id_opt.value();
-  //     // 为新页建立映射,不加入free_frame，因为接下来要使用
-  //   } else {
-  //     // 无可用帧，返回无效页号
-  //     bpm_latch_->unlock();
-  //     return INVALID_PAGE_ID;
-  //   }
-  // } else {
-  //   // 可以直接从空闲链表中获得。
-  //   new_frame_id = free_frames_.front();
-  //   free_frames_.pop_front();
-  //   frames_[new_frame_id]->Reset();  // 刷新旧帧
-  // }
-  // // 建立映射
-  // auto new_page_id = next_page_id_.fetch_add(1);  // 获取当前值并将其加1，保证线程安全
-  // page_table_[new_page_id] = new_frame_id;
-  // pages_[new_frame_id] = new_page_id;
-  // // 新页是脏页
-  // frames_[new_frame_id]->is_dirty_ = true;
-
-  // //  保证该页不可逐出,否则可能一返回就被逐出。
-  // replacer_->RecordAccess(new_frame_id);
-  // // frames_[new_frame_id]->pin_count_.fetch_add(1);
-  // replacer_->SetEvictable(new_frame_id, false);
   auto new_page_id = next_page_id_.fetch_add(1);        // 获取当前值并将其加1，保证线程安全
   disk_scheduler_->IncreaseDiskSpace(new_page_id + 1);  // 磁盘中至少需要有new_page_id+1个页面的空间
   bpm_latch_->unlock();
@@ -217,12 +168,13 @@ auto BufferPoolManager::NewPage() -> page_id_t {
  */
 auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
   //  UNIMPLEMENTED("TODO(P1): Add implementation.");
-  std::lock_guard<std::mutex> lock(*bpm_latch_);  // 获取全局锁，防止有其他线程修改页表
+  std::unique_lock<std::mutex> lock(*bpm_latch_);  // 获取全局锁，防止有其他线程修改页表
   auto iter = page_table_.find(page_id);
   if (iter != page_table_.end()) {
     // 说明对应帧一定在内存中
     auto frame_id = iter->second;
     auto frame = frames_[frame_id];
+    frames_[frame_id]->cv_.wait(lock, [&] { return !frames_[frame_id]->is_loading_; });
     if (frame->pin_count_.load() == 0) {
       // 页面未被固定
       // if (frame->is_dirty_) {
@@ -314,21 +266,25 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
   }
 
   std::unique_lock<std::mutex> lock(*bpm_latch_);
-  // 一把大锁走到底
+
   auto iter = page_table_.find(page_id);  // 1. 判断页是否在内存中
   if (iter != page_table_.end()) {
     // 命中
     auto frame_id = iter->second;
-
     replacer_->RecordAccess(frame_id, access_type);
     // 固定该页
     frames_[frame_id]->pin_count_++;
     replacer_->SetEvictable(frame_id, false);  // 不可逐出
-    frames_[frame_id]->is_dirty_ = true;       // 写入的页是脏页
-    lock.unlock();                             // guard会自己加锁
+    // 如果该帧正在被载入，则需要挂起当前线程
+    frames_[frame_id]->cv_.wait(lock, [&] {
+      return !frames_[frame_id]->is_loading_;  // 为真时挂起，为假时通过
+    });
+    lock.unlock();  // guard会自己加锁
+
     return WritePageGuard(page_id, frames_[frame_id], replacer_, bpm_latch_);
   }
-  // 未命中
+  // 未命中，此时需要先在内存中占位，防止其他线程重复载入同一个页面
+  // 占位包括，建立映射，设置不可逐出。
   auto frame_id_opt = FindFid();
   if (!frame_id_opt.has_value()) {
     return std::nullopt;  // 无可用帧，返回无效页号
@@ -339,28 +295,44 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
   if (pages_.count(frame_id) != 0) {
     // 没有找到对应的页号
     old_page_id = pages_[frame_id];
-    page_table_.erase(old_page_id);  // 从页表中删除旧映射
-    pages_.erase(frame_id);          // 从帧到页的映射中删除旧映射
+    page_table_.erase(old_page_id);
+    pages_.erase(frame_id);  // 从帧到页的映射中删除旧映射
   }
-  if (frames_[frame_id]->is_dirty_) {
-    // 该帧被修改了，先写回磁盘
-    WRData(true, old_page_id, frame_id);
-  }
-
-  // 读取新页
-  frames_[frame_id]->Reset();  // 刷新旧帧
-  WRData(false, page_id, frame_id);
-  // 更新页表和帧到页的映射
-
   page_table_[page_id] = frame_id;
   pages_[frame_id] = page_id;
-  frames_[frame_id]->is_dirty_ = true;  // 写入的页是脏页
-  frames_[frame_id]->pin_count_++;
+  frames_[frame_id]->pin_count_ = 1;
   replacer_->RecordAccess(frame_id, access_type);
   replacer_->SetEvictable(frame_id, false);
+  // 表示该帧正在载入
+  frames_[frame_id]->is_loading_ = true;
+  cv_.wait(lock, [&] { return io_page_.count(page_id) == 0; });
+  if (frames_[frame_id]->is_dirty_) {
+    // 该帧被修改了，先写回磁盘
 
+    io_page_.insert(old_page_id);
+    lock.unlock();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    WRData(true, old_page_id, frame_id);
+    lock.lock();
+    frames_[frame_id]->is_dirty_ = false;
+    io_page_.erase(old_page_id);
+    cv_.notify_all();
+  }
+  // 如果此时有刷盘线程要对这个page刷盘，下一个窗口期就会把这个旧帧刷盘到新页
+  // 导致数据损坏，所以在刷盘前先把这个帧标记为不脏，这样就算被刷盘线程刷盘了，也不会把旧页的数据刷到新页上了。
+  // 读取新页
   lock.unlock();
-  // 如果此时被插队，一般不可能是后来的操作，认为是先到的操作
+
+  WRData(false, page_id, frame_id);
+  lock.lock();
+  // 更新帧的状态
+  frames_[frame_id]->is_loading_ = false;
+  frames_[frame_id]->cv_.notify_all();
+  lock.unlock();
+  // 如果此时被插队，假设当前线程是线程a
+  // 1. 线程b瞬间拿到page的读锁，没有问题，已经正常加载数据到内存了。
+  // 2.
+  // 线程b瞬间拿到page的写锁，虽然逻辑上是a线程先创建，但是在数据库中，是允许的，因为这种并发是有可能产生这样的结果，由上层协议保证正确性。
   return WritePageGuard(page_id, frames_[frame_id], replacer_, bpm_latch_);
 }
 /**
@@ -397,16 +369,22 @@ auto BufferPoolManager::CheckedReadPage(page_id_t page_id, AccessType access_typ
   if (iter != page_table_.end()) {
     // 命中
     auto frame_id = iter->second;
+
     replacer_->RecordAccess(frame_id, access_type);
-    frames_[frame_id]->pin_count_++;           // 固定该页
+    // 固定该页
+    frames_[frame_id]->pin_count_++;
     replacer_->SetEvictable(frame_id, false);  // 不可逐出
-    lock.unlock();                             // guard会自己加读锁
+    // 如果该帧正在被载入，则需要挂起当前线程
+    frames_[frame_id]->cv_.wait(lock, [&] {
+      return !frames_[frame_id]->is_loading_;  // 为真时挂起，为假时通过
+    });
+    lock.unlock();  // guard会自己加锁
     return ReadPageGuard(page_id, frames_[frame_id], replacer_, bpm_latch_);
   }
-  // 未命中
+  // 未命中，此时需要先在内存中占位，防止其他线程重复载入同一个页面
+  // 占位包括，建立映射，设置不可逐出。
   auto frame_id_opt = FindFid();
   if (!frame_id_opt.has_value()) {
-    lock.unlock();
     return std::nullopt;  // 无可用帧，返回无效页号
   }
   // 不在内存中,从磁盘中读取
@@ -415,24 +393,45 @@ auto BufferPoolManager::CheckedReadPage(page_id_t page_id, AccessType access_typ
   if (pages_.count(frame_id) != 0) {
     // 没有找到对应的页号
     old_page_id = pages_[frame_id];
-    page_table_.erase(old_page_id);  // 从页表中删除旧映射
-    pages_.erase(frame_id);          // 从帧到页的映射中删除旧映射
+    page_table_.erase(old_page_id);
+    pages_.erase(frame_id);  // 从帧到页的映射中删除旧映射
   }
-  if (frames_[frame_id_opt.value()]->is_dirty_) {
-    // 该帧被修改了，先写回磁盘
-    WRData(true, old_page_id, frame_id_opt.value());
-  }
-  // 建立映射
-  frames_[frame_id]->Reset();  // 刷新旧帧
-  WRData(false, page_id, frame_id);
-
   page_table_[page_id] = frame_id;
   pages_[frame_id] = page_id;
-  frames_[frame_id]->pin_count_++;
+  frames_[frame_id]->pin_count_ = 1;
   replacer_->RecordAccess(frame_id, access_type);
   replacer_->SetEvictable(frame_id, false);
-  lock.unlock();
+  // 表示该帧正在载入
+  frames_[frame_id]->is_loading_ = true;
+  cv_.wait(lock, [&] {
+    return io_page_.count(page_id) == 0;  // 为真时挂起，为假时通过
+  });
+  if (frames_[frame_id]->is_dirty_) {
+    // 该帧被修改了，先写回磁盘
+    io_page_.insert(old_page_id);
+    lock.unlock();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    WRData(true, old_page_id, frame_id);
+    lock.lock();
+    frames_[frame_id]->is_dirty_ = false;
+    io_page_.erase(old_page_id);
+    cv_.notify_all();
+  }
 
+  // 读取新页
+
+  frames_[frame_id]->is_dirty_ = false;
+  lock.unlock();
+  WRData(false, page_id, frame_id);
+  lock.lock();
+  // 更新帧的状态
+  frames_[frame_id]->is_loading_ = false;
+  frames_[frame_id]->cv_.notify_all();
+  lock.unlock();
+  // 如果此时被插队，假设当前线程是线程a
+  // 1. 线程b瞬间拿到page的读锁，没有问题，已经正常加载数据到内存了。
+  // 2.
+  // 线程b瞬间拿到page的写锁，虽然逻辑上是a线程先创建，但是在数据库中，是允许的，因为这种并发是有可能产生这样的结果，由上层协议保证正确性。
   return ReadPageGuard(page_id, frames_[frame_id], replacer_, bpm_latch_);
 }
 
@@ -517,22 +516,24 @@ void BufferPoolManager::WRData(bool is_write, page_id_t page_id, frame_id_t fram
 auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
   // UNIMPLEMENTED("TODO(P1): Add implementation.");
   // 将这个页持久化到磁盘上，不需要逐出，也不需要修改页表和帧到页的映射
-  bpm_latch_->lock();
+  std::unique_lock<std::mutex> lock(*bpm_latch_);
   // 大锁刷盘
   auto iter = page_table_.find(page_id);
   if (iter == page_table_.end()) {
-    bpm_latch_->unlock();
     return false;  // 页表中没有该页，返回false
   }
   auto frame_id = iter->second;
-  // frames_[frame_id]->rwlatch_.lock();  // 获取写锁，保证没有其他线程在访问该帧
+  frames_[frame_id]->cv_.wait(lock, [&] { return !frames_[frame_id]->is_loading_; });
   if (frames_[frame_id]->is_dirty_) {
-    // 该页被修改了，写回磁盘
+    // 提前将其置为false，防止在解锁期间其他线程修改数据后带来的脏标记被覆盖
+
+    lock.unlock();
+    // frames_[frame_id]->rwlatch_.lock();
     WRData(true, page_id, frame_id);
-    frames_[frame_id]->is_dirty_ = false;  // 刷新后不是脏页了
+    // frames_[frame_id]->rwlatch_.unlock();
+    lock.lock();
   }
-  // frames_[frame_id]->rwlatch_.unlock();
-  bpm_latch_->unlock();
+  frames_[frame_id]->is_dirty_ = false;  // 刷新后不是脏页了
   return true;
 }
 

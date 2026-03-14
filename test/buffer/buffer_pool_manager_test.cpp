@@ -11,8 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdio>
+#include <cstring>
 #include <deque>
 #include <filesystem>
+#include <thread>
 
 #include "buffer/buffer_pool_manager.h"
 #include "gtest/gtest.h"
@@ -429,5 +431,65 @@ TEST(BufferPoolManagerTest, EvictableTest) {
     }
   }
 }
+
+TEST(BufferPoolManagerTest, FlushWriteRaceStressTest) {
+  auto disk_manager = std::make_shared<DiskManager>(db_fname);
+  auto bpm = std::make_shared<BufferPoolManager>(1, disk_manager.get(), K_DIST);
+
+  page_id_t pid = bpm->NewPage();
+
+  {
+    auto guard = bpm->WritePage(pid);
+    memset(guard.GetDataMut(), 'X', BUSTUB_PAGE_SIZE);
+  }
+
+  std::atomic<bool> stop{false};
+  std::atomic<bool> start{false};
+
+  std::thread writer([&] {
+    while (!start.load()) {
+    }
+    char patterns[] = {'A', 'B', 'C', 'D'};
+    int idx = 0;
+    while (!stop.load()) {
+      auto guard = bpm->WritePage(pid);
+      memset(guard.GetDataMut(), patterns[idx], BUSTUB_PAGE_SIZE);
+      idx = (idx + 1) % 4;
+    }
+  });
+
+  std::thread flusher([&] {
+    start.store(true);
+    for (int i = 0; i < 2000; i++) {
+      ASSERT_TRUE(bpm->FlushPage(pid));
+    }
+    stop.store(true);
+  });
+
+  writer.join();
+  flusher.join();
+
+  // 强制把页从内存弄出去，再从磁盘读回来
+  page_id_t pid2 = bpm->NewPage();
+  {
+    auto g = bpm->WritePage(pid2);
+    memset(g.GetDataMut(), 'Z', BUSTUB_PAGE_SIZE);
+  }
+
+  // 再次读取 pid，检查是不是“整页同一字符”
+  auto guard = bpm->ReadPage(pid);
+  const char *data = guard.GetData();
+
+  bool all_same = true;
+  for (size_t i = 1; i < BUSTUB_PAGE_SIZE; i++) {
+    if (data[i] != data[0]) {
+      all_same = false;
+      break;
+    }
+  }
+
+  ASSERT_TRUE(all_same);
+}
+// ...existing code...
 
 }  // namespace bustub

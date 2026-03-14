@@ -12,10 +12,12 @@
 
 #pragma once
 
+#include <condition_variable>
 #include <list>
 #include <memory>
 #include <shared_mutex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "buffer/lru_k_replacer.h"
@@ -88,6 +90,8 @@ class FrameHeader {
    */
   std::vector<char> data_;
 
+  bool is_loading_{false};      // 检测该帧是否正在被加载，防止多个线程同时加载同一页
+  std::condition_variable cv_;  // 条件变量
   /**
    * TODO(P1): You may add any fields or helper functions under here that you think are necessary.
    *
@@ -156,7 +160,8 @@ class BufferPoolManager {
 
   /** @brief A pointer to the disk scheduler. */
   std::unique_ptr<DiskScheduler> disk_scheduler_;
-
+  std::unordered_set<page_id_t> io_page_;
+  std::condition_variable cv_;
   std::unordered_map<frame_id_t, page_id_t> pages_;
   /**
    * @brief A pointer to the log manager.
