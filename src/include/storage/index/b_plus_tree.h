@@ -11,6 +11,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <deque>
 #include <filesystem>
 #include <iostream>
@@ -68,6 +69,18 @@ class BPlusTree {
   explicit BPlusTree(std::string name, page_id_t header_page_id, BufferPoolManager *buffer_pool_manager,
                      const KeyComparator &comparator, int leaf_max_size = LEAF_PAGE_SLOT_CNT,
                      int internal_max_size = INTERNAL_PAGE_SLOT_CNT);
+
+  // 分裂一个叶子节点
+  auto SplitLeaf(WritePageGuard &&leaf_guard) -> std::pair<WritePageGuard, KeyType>;
+
+  // 找到目标叶子节点，返回叶子节点的页号
+  auto FindTargetPageId(const KeyType &key, Context *ctx) const -> size_t;
+
+  auto InsertToInternalNode(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> &internal_node, const KeyType &key,
+                            const page_id_t &value) -> std::optional<std::pair<KeyType, page_id_t>>;
+
+  auto CreateLeafRoot(Context *ctx, const KeyType &key, const ValueType &value) -> WritePageGuard;
+  auto CreateInternalRoot(Context *ctx, const page_id_t &value) -> WritePageGuard;
 
   // Returns true if this B+ tree has no keys and values.
   auto IsEmpty() const -> bool;

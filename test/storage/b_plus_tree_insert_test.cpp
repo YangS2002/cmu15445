@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 
 #include "buffer/buffer_pool_manager.h"
@@ -23,7 +24,7 @@ namespace bustub {
 
 using bustub::DiskManagerUnlimitedMemory;
 
-TEST(BPlusTreeTests, DISABLED_BasicInsertTest) {
+TEST(BPlusTreeTests, BasicInsertTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -56,7 +57,7 @@ TEST(BPlusTreeTests, DISABLED_BasicInsertTest) {
   delete bpm;
 }
 
-TEST(BPlusTreeTests, DISABLED_InsertTest1NoIterator) {
+TEST(BPlusTreeTests, InsertTest1NoIterator) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -70,14 +71,18 @@ TEST(BPlusTreeTests, DISABLED_InsertTest1NoIterator) {
   GenericKey<8> index_key;
   RID rid;
 
-  std::vector<int64_t> keys = {1, 2, 3, 4, 5};
+  std::vector<int64_t> keys = {1, 2, 3, 4, 5,6,7};
   for (auto key : keys) {
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid);
   }
-
+  int64_t key=8;
+  int64_t value = key & 0xFFFFFFFF;
+  rid.Set(static_cast<int32_t>(key >> 32), value);
+  index_key.SetFromInteger(key);
+  tree.Insert(index_key, rid);
   bool is_present;
   std::vector<RID> rids;
 
@@ -95,7 +100,7 @@ TEST(BPlusTreeTests, DISABLED_InsertTest1NoIterator) {
   delete bpm;
 }
 
-TEST(BPlusTreeTests, DISABLED_InsertTest2) {
+TEST(BPlusTreeTests, InsertTest2) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());

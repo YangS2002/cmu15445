@@ -10,18 +10,20 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include <cstddef>
+#include <iostream>
 #include <queue>
 #include <string>
-
 #include "storage/page/b_plus_tree_page.h"
 
 namespace bustub {
 
 #define B_PLUS_TREE_INTERNAL_PAGE_TYPE BPlusTreeInternalPage<KeyType, ValueType, KeyComparator>
-#define INTERNAL_PAGE_HEADER_SIZE 12
+#define INTERNAL_PAGE_HEADER_SIZE 12  // page_id(int) + size(int) + max_size(int) = 12
 #define INTERNAL_PAGE_SLOT_CNT \
   ((BUSTUB_PAGE_SIZE - INTERNAL_PAGE_HEADER_SIZE) / ((int)(sizeof(KeyType) + sizeof(ValueType))))  // NOLINT
-
+// 计算中间节点的最大容量，BUSTUB_PAGE_SIZE - INTERNAL_PAGE_HEADER_SIZE
+// 是中间节点剩余的空间，除以每个键值对占用的空间（sizeof(KeyType) + sizeof(ValueType)）得到最大键值对数量
 /**
  * Store `n` indexed keys and `n + 1` child pointers (page_id) within internal page.
  * Pointer PAGE_ID(i) points to a subtree in which all keys K satisfy:
@@ -104,6 +106,22 @@ class BPlusTreeInternalPage : public BPlusTreePage {
 
     return kstr;
   }
+
+  auto GetValue(KeyType targetkey, KeyComparator &comparator) const -> ValueType {
+    for (int i = 1; i < GetSize(); i++) {  // 区间 key[i] <= target < key[i+1]， key数组是有序的，所以顺序扫描即可
+      KeyType cur_key = KeyAt(i);
+      if (comparator(cur_key, targetkey) > 0) {
+        return ValueAt(i - 1);
+      }
+    }
+    return ValueAt(GetSize() - 1);
+  }
+
+  auto GetKeyIndex(const KeyType &target_key, const KeyComparator &comparator) const -> int;
+  auto ArrayShift(size_t pos, bool is_left = false) -> void;
+  auto MoveHalfto(BPlusTreeInternalPage<KeyType, ValueType, KeyComparator> &new_internal_node) -> void;
+  auto InsertKeyAt(const KeyType &target_key, const ValueType &target_value, int insert_pos) -> void;
+  auto FindInsertPosition(const KeyType &target_key, const KeyComparator &comparator) const -> int;
 
  private:
   // Array members for page data.
