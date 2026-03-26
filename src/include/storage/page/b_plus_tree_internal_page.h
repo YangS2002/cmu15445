@@ -118,10 +118,17 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   }
 
   auto GetKeyIndex(const KeyType &target_key, const KeyComparator &comparator) const -> int;
-  auto ArrayShift(size_t pos, bool is_left = false) -> void;
+  auto ArrayShift(size_t pos, size_t len, bool is_left) -> void;
   auto MoveHalfto(BPlusTreeInternalPage<KeyType, ValueType, KeyComparator> &new_internal_node) -> void;
-  auto InsertKeyAt(const KeyType &target_key, const ValueType &target_value, int insert_pos) -> void;
+
   auto FindInsertPosition(const KeyType &target_key, const KeyComparator &comparator) const -> int;
+  auto GetBrotherPageId(page_id_t target_page_id, bool &is_left_brother) const -> std::optional<page_id_t>;
+  auto MoveDataTo(BPlusTreeInternalPage<KeyType, ValueType, KeyComparator> &dest_node, int src_start, int src_len,
+                  int dest_start) -> void;
+  auto RemoveValueandKey(const ValueType &value) -> bool;
+
+  auto InsertKeyAt(const KeyType &target_key, const ValueType &target_value, int insert_pos) -> void;
+  auto ReplaceKeyandValueAt(const KeyType &target_key, const ValueType &target_value, int pos) -> void;
 
  private:
   // Array members for page data.

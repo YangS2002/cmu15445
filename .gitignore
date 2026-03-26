@@ -246,3 +246,4 @@ docs/dev
 *.zip
 test.bustub
 bplustree
+debug

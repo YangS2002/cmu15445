@@ -13,6 +13,7 @@
 #include <cassert>
 #include <climits>
 #include <cstdlib>
+#include <shared_mutex>
 #include <string>
 
 #include "buffer/buffer_pool_manager.h"

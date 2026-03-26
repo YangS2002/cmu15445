@@ -79,8 +79,12 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto InsertKeyAt(const KeyType &key, const ValueType &value, int insert_pos) -> void;
   auto IsFull() const -> bool { return GetSize() == GetMaxSize(); }
   auto MoveHalfto(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> &new_leaf_node) -> void;
-  auto ArrayShift(size_t pos, bool is_left = false) -> void;
-  auto RemoveKey(const KeyType &key,KeyComparator &comparator) -> bool;
+  auto ArrayShift(size_t pos, size_t len, bool is_left) -> void;
+  auto RemoveKey(const KeyType &key, KeyComparator &comparator) -> bool;
+  auto MoveDataTo(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> &dest_node, int src_start, int src_len,
+                  int dest_start) -> void;
+  auto GetKeyIndex(const KeyType &key, const KeyComparator &comparator) const -> int;
+
   /**
    * @brief For test only return a string representing all keys in
    * this leaf page formatted as "(key1,key2,key3,...)"

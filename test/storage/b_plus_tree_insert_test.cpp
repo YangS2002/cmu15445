@@ -11,11 +11,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 
 #include "buffer/buffer_pool_manager.h"
 #include "gtest/gtest.h"
+#include "storage/disk/disk_manager.h"
 #include "storage/disk/disk_manager_memory.h"
 #include "storage/index/b_plus_tree.h"
 #include "test_util.h"  // NOLINT
@@ -71,14 +74,14 @@ TEST(BPlusTreeTests, InsertTest1NoIterator) {
   GenericKey<8> index_key;
   RID rid;
 
-  std::vector<int64_t> keys = {1, 2, 3, 4, 5,6,7};
+  std::vector<int64_t> keys = {1, 2, 3, 4, 5, 6, 7};
   for (auto key : keys) {
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
     tree.Insert(index_key, rid);
   }
-  int64_t key=8;
+  int64_t key = 8;
   int64_t value = key & 0xFFFFFFFF;
   rid.Set(static_cast<int32_t>(key >> 32), value);
   index_key.SetFromInteger(key);
@@ -156,4 +159,68 @@ TEST(BPlusTreeTests, InsertTest2) {
   }
   delete bpm;
 }
+
+TEST(BPlusTreeTests, InsertReadCocurrentTest) {
+  const size_t NUM_ITERS = 10;
+  for (size_t iter =0;iter<NUM_ITERS;iter++){
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  auto *disk_manager = new  DiskManagerUnlimitedMemory();
+  auto *bpm = new BufferPoolManager(50, disk_manager);
+  // allocate header_page
+  page_id_t page_id = bpm->NewPage();
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", page_id, bpm, comparator, 3, 5);
+
+  auto max_key = 2000;
+  std::vector<int64_t> keys(max_key);
+
+  for (int i = 0; i < max_key; i++) {
+    keys[i] = i;
+    RID rid;
+    GenericKey<8> index_key_;
+    index_key_.SetFromInteger(keys[i]);
+    int64_t value = keys[i] & 0xFFFFFFFF;
+    rid.Set(static_cast<int32_t>(keys[i]), value);
+    tree.Insert(index_key_,rid );
+  }
+
+  {
+  }
+  {  // 在创建读取线程
+    // 创建多个线程
+    std::vector<std::thread> read_threads;
+    std::atomic_uint64_t index = 0;
+    auto start = std::chrono::steady_clock::now();
+    for (int i = 0; i < 8; i++) {
+      read_threads.emplace_back([&tree, &index, &keys]() {
+        GenericKey<8> index_key_;
+        while (index < keys.size()) {
+          int64_t key = keys[index.fetch_add(1)];
+          index_key_.SetFromInteger(key);
+          std::vector<RID> rids;
+          tree.GetValue(index_key_, &rids);
+          if (!rids.empty()) {
+            EXPECT_EQ(rids.size(), 1);
+
+            EXPECT_EQ(rids[0].GetSlotNum(), key);
+          }
+        }
+      });
+    }
+
+    for (auto &thread : read_threads) {
+      thread.join();
+    }
+    auto end = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "read time = " << duration.count() << " ms" << std::endl;
+  }
+  delete disk_manager;
+  delete bpm;
+}
+}
+
 }  // namespace bustub
