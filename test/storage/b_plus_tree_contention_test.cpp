@@ -86,6 +86,8 @@ TEST(BPlusTreeContentionTest, BPlusTreeContentionBenchmark) {  // NOLINT
     ASSERT_TRUE(BPlusTreeLockBenchmarkCall(32, 2, enable_mutex));
     auto clock_end = std::chrono::system_clock::now();
     auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(clock_end - clock_start);
+    std::cout << "Iteration " << iter << " with mutex " << enable_mutex << " took " << dur.count() << " ms"
+              << std::endl;
     if (enable_mutex) {
       time_ms_with_mutex.push_back(dur.count());
     } else {

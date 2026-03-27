@@ -67,23 +67,23 @@ class BPlusTree {
 
  public:
   explicit BPlusTree(std::string name, page_id_t header_page_id, BufferPoolManager *buffer_pool_manager,
-                     const KeyComparator &comparator, int leaf_max_size = LEAF_PAGE_SLOT_CNT-1,
-                     int internal_max_size = INTERNAL_PAGE_SLOT_CNT-1);
+                     const KeyComparator &comparator, int leaf_max_size = LEAF_PAGE_SLOT_CNT - 1,
+                     int internal_max_size = INTERNAL_PAGE_SLOT_CNT - 1);
 
   // 分裂一个叶子节点
   auto SplitLeaf(WritePageGuard &&leaf_guard) -> std::pair<WritePageGuard, KeyType>;
 
   // 找到目标叶子节点，返回叶子节点的页号
-  auto FindTargetPageId(const KeyType &key, Context *ctx) const -> void;
+  auto FindTargetPageId(const KeyType &key, Context *ctx, bool is_insert) const -> void;
 
-  auto InsertToInternalNode(WritePageGuard &&internal_page_guard, const KeyType &key,
-                            const page_id_t &value) -> std::optional<std::pair<KeyType, page_id_t>>;
+  auto InsertToInternalNode(WritePageGuard &&internal_page_guard, const KeyType &key, const page_id_t &value)
+      -> std::optional<std::pair<KeyType, page_id_t>>;
 
-  auto CoalesceOrRedistributeInternal(WritePageGuard &&internal_page_guard,
-                                      page_id_t internal_page_id, Context *ctx) -> std::optional<WritePageGuard>;
+  auto CoalesceOrRedistributeInternal(WritePageGuard &&internal_page_guard, page_id_t internal_page_id, Context *ctx)
+      -> std::optional<WritePageGuard>;
 
-  auto CoalesceOrRedistributeLeaf(WritePageGuard &&leaf_page,
-                                  page_id_t leaf_node_id, Context *ctx) -> std::optional<WritePageGuard>;
+  auto CoalesceOrRedistributeLeaf(WritePageGuard &&leaf_page, page_id_t leaf_node_id, Context *ctx)
+      -> std::optional<WritePageGuard>;
 
   auto CreateLeafRoot(Context *ctx, const KeyType &key, const ValueType &value) -> WritePageGuard;
   auto CreateInternalRoot(Context *ctx, const page_id_t &value) -> WritePageGuard;
