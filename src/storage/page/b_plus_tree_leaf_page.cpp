@@ -60,7 +60,8 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) { next_pa
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetValue(const KeyType &target_key, const KeyComparator &comparator,
                                           std::vector<ValueType> *result) const -> void {
-  int left = 0, right = GetSize();
+  int left = 0;
+  int right = GetSize();
   while (left < right) {
     int mid = left + (right - left) / 2;
     auto cmp = comparator(KeyAt(mid), target_key);
@@ -73,8 +74,6 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetValue(const KeyType &target_key, const KeyCo
   if (left < GetSize() && comparator(KeyAt(left), target_key) == 0) {
     result->push_back(ValueAt(left));
   }
-
-  return;  // rid 默认会把page_id 初始化为无效
 }
 
 // 将键值数组pos到end的所有数据平移，
@@ -102,7 +101,8 @@ INDEX_TEMPLATE_ARGUMENTS
 // 如果是重复键，返回 -1 表示插入失败
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::FindInsertPosition(const KeyType &key, const KeyComparator &comparator) const -> int {
   // 找到第一个大于key的位置，如果等于则返回-1表示插入失败，如果大于则返回这个位置的数组偏移
-  int left = 0, right = GetSize();
+  int left = 0;
+  int right = GetSize();
 
   while (left < right) {
     int mid = left + (right - left) / 2;
@@ -183,7 +183,8 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::RemoveKey(const KeyType &key, KeyComparator &co
 // 返回一个键的索引，没找到返回-1
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetKeyIndex(const KeyType &key, const KeyComparator &comparator) const -> int {
-  int left = 0, right = GetSize();
+  int left = 0;
+  int right = GetSize();
   while (left < right) {
     int mid = left + (right - left) / 2;
     auto cmp = comparator(KeyAt(mid), key);

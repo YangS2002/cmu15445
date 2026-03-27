@@ -64,7 +64,7 @@ bool BPlusTreeLockBenchmarkCall(size_t num_threads, int leaf_node_size, bool wit
   for (auto &thread : threads) {
     thread.join();
   }
-
+  bpm->Statistics();
   delete disk_manager;
   delete bpm;
 
@@ -88,6 +88,7 @@ TEST(BPlusTreeContentionTest, BPlusTreeContentionBenchmark) {  // NOLINT
     auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(clock_end - clock_start);
     std::cout << "Iteration " << iter << " with mutex " << enable_mutex << " took " << dur.count() << " ms"
               << std::endl;
+    
     if (enable_mutex) {
       time_ms_with_mutex.push_back(dur.count());
     } else {

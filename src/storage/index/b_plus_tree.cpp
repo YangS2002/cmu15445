@@ -35,15 +35,13 @@ auto BPLUSTREE_TYPE::CreateLeafRoot(Context *ctx, const KeyType &key, const Valu
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::CreateInternalRoot(Context *ctx, const page_id_t &value) -> WritePageGuard {
+auto BPLUSTREE_TYPE::CreateInternalRoot(Context *ctx) -> WritePageGuard {
   // 创建一个新根，返回新中间节点根的写guard，
   auto new_root_page_id = bpm_->NewPage();
   auto new_root_page_guard = bpm_->WritePage(new_root_page_id);
 
   auto new_root_internal_page = new_root_page_guard.AsMut<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator>>();
   new_root_internal_page->Init(internal_max_size_);
-  new_root_internal_page->InsertKeyAt(KeyType{}, value, 0);  // 插入一个无效键，value是子节点页号
-
   auto header_page_guard = std::move(ctx->header_page_);
   header_page_guard->AsMut<BPlusTreeHeaderPage>()->root_page_id_ = new_root_page_id;  // 更新根节点页号
   ctx->header_page_ = std::move(header_page_guard);                                   // 更新header_page_guard
@@ -97,7 +95,6 @@ auto BPLUSTREE_TYPE::FindTargetPageId(const KeyType &key, Context *ctx, bool is_
     cur_page_guard = bpm_->WritePage(target_page_id);      // 移动语义，旧的释放
   }
   ctx->write_set_.push_back(std::move(cur_page_guard));
-  return;
 }
 
 /*
@@ -150,7 +147,7 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
 
 // 向一个中间节点插入一个键
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InsertToInternalNode(WritePageGuard &&internal_page_guard, const KeyType &key,
+auto BPLUSTREE_TYPE::InsertToInternalNode(WritePageGuard &internal_page_guard, const KeyType &key,
                                           const page_id_t &value) -> std::optional<std::pair<KeyType, page_id_t>> {
   auto internal_node = internal_page_guard.AsMut<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator>>();
   if (internal_node->GetSize() == internal_node->GetMaxSize()) {
@@ -229,29 +226,24 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value) -> bool 
 
     // 上升
     auto new_child_page_id = new_page_id;
-    auto old_child_page_id = target_page_guard.GetPageId();
     auto ret = std::optional<std::pair<KeyType, page_id_t>>{std::make_pair(new_key, new_child_page_id)};
-    while (true) {
-      if (!ctx.write_set_.empty()) {
-        auto internal_page_guard = std::move(ctx.write_set_.back());
-        ctx.write_set_.pop_back();
-        old_child_page_id = internal_page_guard.GetPageId();
-        ret = InsertToInternalNode(std::move(internal_page_guard), new_key, new_child_page_id);
-      }
-      if (ret.has_value()) {
-        if (ctx.write_set_.empty()) {
-          // 已经没有父节点了，说明当前节点是根节点，需要创建新根
-          auto root_page_guard = CreateInternalRoot(&ctx, old_child_page_id);
-          ctx.write_set_.push_back(std::move(root_page_guard));
-          // 将新根和当前节点连起来
-        }
-        // 需要分裂
-        new_key = ret.value().first;
-        new_child_page_id = ret.value().second;
+    auto internal_page_guard = std::move(target_page_guard);
+    while (ret.has_value()) {
+      // ret 有值表示还需要向上
+      if (ctx.write_set_.empty()) {
+        // 已经到达根节点了，创建一个新的根节点
+        auto new_root_page_guard = CreateInternalRoot(&ctx);
+        auto new_root_internal_page =
+            new_root_page_guard.template AsMut<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator>>();
+        new_root_internal_page->InsertKeyAt(ret->first, ret->second, 0);
+        new_root_internal_page->InsertKeyAt(
+            KeyType{}, internal_page_guard.GetPageId(),
+            0);  // 新根节点的第一个key是原根节点的第一个key，第二个key是分裂后新页的索引key
         ret = std::nullopt;
       } else {
-        // 插入成功，无需分裂，结束循环
-        return true;
+        internal_page_guard = std::move(ctx.write_set_.back());
+        ctx.write_set_.pop_back();
+        ret = InsertToInternalNode(internal_page_guard, ret->first, ret->second);
       }
     }
 
@@ -384,6 +376,7 @@ auto BPLUSTREE_TYPE::CoalesceOrRedistributeLeaf(WritePageGuard &&leaf_page, page
     leaf_page.Drop();
     brother_page_guard = bpm_->WritePage(brother_page_id.value());
     leaf_page = bpm_->WritePage(leaf_node_id);  // 重新获取当前节点的写guard
+    leaf_node = leaf_page.template AsMut<BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>>();
   } else {
     brother_page_guard = bpm_->WritePage(brother_page_id.value());
   }

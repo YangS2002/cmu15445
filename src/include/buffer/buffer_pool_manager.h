@@ -132,6 +132,7 @@ class BufferPoolManager {
   void WaitUntilPageNotInIOLocked(std::unique_lock<std::mutex> &lock, page_id_t page_id);
   auto GetAvailableFrameLocked() -> std::optional<frame_id_t>;
   auto FindFid() -> std::optional<frame_id_t>;
+  void Statistics();
 
  private:
   /** @brief The number of frames in the buffer pool. */

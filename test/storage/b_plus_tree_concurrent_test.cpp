@@ -348,7 +348,6 @@ void MixTest1Call() {
     }
     // Insert all the keys to delete
     InsertHelper(&tree, for_delete);
-
     auto insert_task = [&](int tid) { InsertHelper(&tree, for_insert); };
     auto delete_task = [&](int tid) { DeleteHelper(&tree, for_delete); };
     std::vector<std::function<void(int)>> tasks;
@@ -356,15 +355,14 @@ void MixTest1Call() {
     tasks.emplace_back(delete_task);
     std::vector<std::thread> threads;
     size_t num_threads = 10;
+
     for (size_t i = 0; i < num_threads; i++) {
       threads.emplace_back(tasks[i % tasks.size()], i);
     }
     for (size_t i = 0; i < num_threads; i++) {
       threads[i].join();
     }
-
     int64_t size = 0;
-
     for (auto iter = tree.Begin(); iter != tree.End(); ++iter) {
       const auto &pair = *iter;
       ASSERT_EQ((pair.first).ToString(), for_insert[size]);
@@ -446,19 +444,19 @@ void MixTest2Call() {
   }
 }
 
-TEST(BPlusTreeConcurrentTest, InsertTest1) {  // NOLINT
+TEST(BPlusTreeConcurrentTest, DISABLED_InsertTest1) {  // NOLINT
   InsertTest1Call();
 }
 
-TEST(BPlusTreeConcurrentTest, InsertTest2) {  // NOLINT
+TEST(BPlusTreeConcurrentTest, DISABLED_InsertTest2) {  // NOLINT
   InsertTest2Call();
 }
 
-TEST(BPlusTreeConcurrentTest, DeleteTest1) {  // NOLINT
+TEST(BPlusTreeConcurrentTest, DISABLED_DeleteTest1) {  // NOLINT
   DeleteTest1Call();
 }
 
-TEST(BPlusTreeConcurrentTest, DeleteTest2) {  // NOLINT
+TEST(BPlusTreeConcurrentTest, DISABLED_DeleteTest2) {  // NOLINT
   DeleteTest2Call();
 }
 

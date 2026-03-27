@@ -255,10 +255,10 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
       auto frame = frames_[fid];
 
       frame->pin_count_.fetch_add(1);
+      
       replacer_->RecordAccess(fid, access_type);
       replacer_->SetEvictable(fid, false);
-
-      lock.unlock();
+      lock.unlock();  
       return WritePageGuard(page_id, frame, replacer_, bpm_latch_);
     }
 
@@ -438,6 +438,11 @@ auto BufferPoolManager::GetPinCount(page_id_t page_id) -> std::optional<size_t> 
   }
   auto fid = it->second;
   return frames_[fid]->pin_count_.load();
+}
+
+void BufferPoolManager::Statistics() {
+  std::cout << "replacer access and evict " << replacer_->recordaccess_num_ << " " << replacer_->evict_num_
+            << std::endl;
 }
 
 }  // namespace bustub

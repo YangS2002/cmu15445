@@ -76,7 +76,7 @@ class BPlusTree {
   // 找到目标叶子节点，返回叶子节点的页号
   auto FindTargetPageId(const KeyType &key, Context *ctx, bool is_insert) const -> void;
 
-  auto InsertToInternalNode(WritePageGuard &&internal_page_guard, const KeyType &key, const page_id_t &value)
+  auto InsertToInternalNode(WritePageGuard &internal_page_guard, const KeyType &key, const page_id_t &value)
       -> std::optional<std::pair<KeyType, page_id_t>>;
 
   auto CoalesceOrRedistributeInternal(WritePageGuard &&internal_page_guard, page_id_t internal_page_id, Context *ctx)
@@ -86,7 +86,7 @@ class BPlusTree {
       -> std::optional<WritePageGuard>;
 
   auto CreateLeafRoot(Context *ctx, const KeyType &key, const ValueType &value) -> WritePageGuard;
-  auto CreateInternalRoot(Context *ctx, const page_id_t &value) -> WritePageGuard;
+  auto CreateInternalRoot(Context *ctx) -> WritePageGuard;
 
   // Returns true if this B+ tree has no keys and values.
   auto IsEmpty() const -> bool;

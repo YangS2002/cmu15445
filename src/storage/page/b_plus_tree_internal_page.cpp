@@ -74,7 +74,8 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const ->
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetKeyIndex(const KeyType &target_key, const KeyComparator &comparator) const
     -> int {
-  int left = 1, right = GetSize();  // 内部节点的第一个key是无效的，所以从1开始
+  int left = 1;
+  int right = GetSize();  // 内部节点的第一个key是无效的，所以从1开始
   while (left < right) {
     int mid = left + (right - left) / 2;
     auto cmp = comparator(KeyAt(mid), target_key);
@@ -116,7 +117,7 @@ INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertKeyAt(const KeyType &target_key, const ValueType &target_value,
                                                  int insert_pos) -> void {
   if (insert_pos < 0 || insert_pos > GetSize()) {
-    throw Exception(fmt::format("Invalid insert position\n"));
+    throw Exception(fmt::format("Invalid insert position {}\n", insert_pos));
   }
   if (GetSize() > GetMaxSize()) {
     throw Exception(fmt::format("Internal page is full ,cant insert key\n"));
@@ -162,7 +163,8 @@ INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::FindInsertPosition(const KeyType &target_key,
                                                         const KeyComparator &comparator) const -> int {
   // 找到第一个大于key的位置，如果等于则返回-1表示插入失败，如果大于则返回这个位置的数组偏移
-  int left = 1, right = GetSize();
+  int left = 1;
+  int right = GetSize();
 
   while (left < right) {
     int mid = left + (right - left) / 2;

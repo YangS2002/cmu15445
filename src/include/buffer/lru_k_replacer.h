@@ -13,10 +13,11 @@
 #pragma once
 
 #include <cstddef>
-#include <limits>
+
 #include <list>
 #include <mutex>  // NOLINT
 #include <optional>
+#include <set>
 #include <unordered_map>
 #include <vector>
 #include "common/config.h"
@@ -45,10 +46,11 @@ class LRUKNode {
     is_evictable_ = true;
   }  // 注意[] 会调用默认构造函数，导致k_没有被正确初始化
      // 没写默认构造函数，所以不能使用[]来创建LRUKNode对象
+  auto GetFrameid() -> frame_id_t { return fid_; };
   void PopFront() { history_.pop_front(); }
-  void PushBack(size_t timestamp) { history_.push_back(timestamp); }
-  void PopBack() { history_.pop_back(); }
-  void PushFront(size_t timestamp) { history_.push_front(timestamp); }
+  auto PushBack(size_t timestamp) -> void;
+  auto PopBack() { history_.pop_back(); }
+  auto PushFront(size_t timestamp) -> void;
   auto Getback() -> size_t {
     if (history_.empty()) {
       throw Exception(fmt::format("frame {} has no history\n", fid_));
@@ -172,10 +174,44 @@ class LRUKReplacer {
   auto Size() -> size_t;
 
  private:
+  struct EvictEntry {
+    frame_id_t frame_id_;
+    bool is_infinite_;  // history size < k
+    size_t time_;       // infinite 时存最早访问时间；否则存 backward k-distance
+  };
+  struct EvictCmp {
+    auto operator()(const EvictEntry &a, const EvictEntry &b) const -> bool {
+      // 1. history size < k 的优先被驱逐
+      if (a.is_infinite_ != b.is_infinite_) {
+        return static_cast<int>(a.is_infinite_) > static_cast<int>(b.is_infinite_);
+      }
+      // 2. 都是 infinite：按最早访问时间，小的优先
+      if (a.is_infinite_) {
+        if (a.time_ != b.time_) {
+          return a.time_ < b.time_;
+        }
+      }
+      // 3. 都不是 infinite：按前k最早访问时间
+      if (a.time_ != b.time_) {
+        return a.time_ < b.time_;
+      }
+
+      // 4. 最后用 frame_id 打破平局，保证严格弱序
+      return a.frame_id_ < b.frame_id_;
+    }
+  };
+
+ public:
+  size_t recordaccess_num_ = 0;
+  size_t evict_num_ = 0;
+
+ private:
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
-  std::unordered_map<frame_id_t, LRUKNode> node_store_;  // 存储frame_id和对应的LRUKNode
-  size_t current_timestamp_{0};                          // 当前的时间戳，当访问一个frame时，时间戳加1
+  std::unordered_map<frame_id_t, LRUKNode> node_store_;
+
+  std::set<EvictEntry, EvictCmp> evict_;
+  size_t current_timestamp_{0};  // 当前的时间戳，当访问一个frame时，时间戳加1
   [[maybe_unused]] size_t curr_size_{0};
   size_t replacer_size_;
   [[maybe_unused]] size_t k_;
