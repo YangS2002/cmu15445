@@ -11,6 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "storage/page/page_guard.h"
+#include <sys/syscall.h>
+#include <unistd.h>
+#include <iostream>
 #include <mutex>
 #include <utility>
 #include "buffer/lru_k_replacer.h"
@@ -193,7 +196,7 @@ ReadPageGuard::~ReadPageGuard() { Drop(); }
 WritePageGuard::WritePageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> frame,
                                std::shared_ptr<LRUKReplacer> replacer, std::shared_ptr<std::mutex> bpm_latch)
     : page_id_(page_id), frame_(std::move(frame)), replacer_(std::move(replacer)), bpm_latch_(std::move(bpm_latch)) {
-  // UNIMPLEMENTED("TODO(P1): Add implementation.");
+  // UNIMPLEMENTED("TODO(P1): Add implementation.")
   frame_->rwlatch_.lock();
 
   is_valid_ = true;
@@ -319,7 +322,7 @@ void WritePageGuard::Drop() {
         replacer_->SetEvictable(frame_->frame_id_, true);
       }
     }
-    frame_->rwlatch_.unlock();  // 解锁应该设置为可逐出后，
+    frame_->rwlatch_.unlock();  // 在设置可逐出后解锁
     is_valid_ = false;
   }
 }

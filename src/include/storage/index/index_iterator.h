@@ -14,6 +14,8 @@
  */
 #pragma once
 #include <utility>
+#include "buffer/buffer_pool_manager.h"
+#include "common/config.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
 
 namespace bustub {
@@ -24,7 +26,7 @@ INDEX_TEMPLATE_ARGUMENTS
 class IndexIterator {
  public:
   // you may define your own constructor based on your member variables
-  IndexIterator();
+  IndexIterator(BufferPoolManager *bpm, page_id_t page_id, int index = 0);
   ~IndexIterator();  // NOLINT
 
   auto IsEnd() -> bool;
@@ -33,12 +35,18 @@ class IndexIterator {
 
   auto operator++() -> IndexIterator &;
 
-  auto operator==(const IndexIterator &itr) const -> bool { throw std::runtime_error("unimplemented"); }
+  auto operator==(const IndexIterator &itr) const -> bool { return itr.page_id_ == page_id_ && itr.index_ == index_; }
 
-  auto operator!=(const IndexIterator &itr) const -> bool { throw std::runtime_error("unimplemented"); }
+  auto operator!=(const IndexIterator &itr) const -> bool {
+    return !(itr.page_id_ == page_id_ && itr.index_ == index_);
+  }
 
  private:
   // add your own private member variables here
+  BufferPoolManager *bpm_;
+  page_id_t page_id_;
+  const BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *leaf_page_;
+  int index_;
 };
 
 }  // namespace bustub

@@ -9,7 +9,8 @@
 // Copyright (c) 2015-2024, Carnegie Mellon University Database Group
 //
 //===----------------------------------------------------------------------===//
-
+#include <sys/syscall.h>
+#include <unistd.h>
 #include <chrono>  // NOLINT
 #include <cstdio>
 #include <filesystem>
@@ -48,7 +49,6 @@ void InsertHelper(BPlusTree<GenericKey<8>, RID, GenericComparator<8>> *tree, con
                   __attribute__((unused)) uint64_t thread_itr = 0) {
   GenericKey<8> index_key;
   RID rid;
-
   for (auto key : keys) {
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
@@ -77,7 +77,6 @@ void InsertHelperSplit(BPlusTree<GenericKey<8>, RID, GenericComparator<8>> *tree
 void DeleteHelper(BPlusTree<GenericKey<8>, RID, GenericComparator<8>> *tree, const std::vector<int64_t> &remove_keys,
                   __attribute__((unused)) uint64_t thread_itr = 0) {
   GenericKey<8> index_key;
-
   for (auto key : remove_keys) {
     index_key.SetFromInteger(key);
     tree->Remove(index_key);
@@ -202,6 +201,10 @@ void InsertTest2Call() {
       rids.clear();
       index_key.SetFromInteger(key);
       tree.GetValue(index_key, &rids);
+      if (rids.size() != 1) {
+        std::cout << "key: " << key << " size: " << rids.size() << std::endl;
+      }
+      EXPECT_EQ(rids.size(), 1);
       ASSERT_EQ(rids.size(), 1);
 
       int64_t value = key & 0xFFFFFFFF;
@@ -345,7 +348,6 @@ void MixTest1Call() {
     }
     // Insert all the keys to delete
     InsertHelper(&tree, for_delete);
-
     auto insert_task = [&](int tid) { InsertHelper(&tree, for_insert); };
     auto delete_task = [&](int tid) { DeleteHelper(&tree, for_delete); };
     std::vector<std::function<void(int)>> tasks;
@@ -353,15 +355,14 @@ void MixTest1Call() {
     tasks.emplace_back(delete_task);
     std::vector<std::thread> threads;
     size_t num_threads = 10;
+
     for (size_t i = 0; i < num_threads; i++) {
       threads.emplace_back(tasks[i % tasks.size()], i);
     }
     for (size_t i = 0; i < num_threads; i++) {
       threads[i].join();
     }
-
     int64_t size = 0;
-
     for (auto iter = tree.Begin(); iter != tree.End(); ++iter) {
       const auto &pair = *iter;
       ASSERT_EQ((pair.first).ToString(), for_insert[size]);
@@ -459,10 +460,9 @@ TEST(BPlusTreeConcurrentTest, DISABLED_DeleteTest2) {  // NOLINT
   DeleteTest2Call();
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_MixTest1) {  // NOLINT
+TEST(BPlusTreeConcurrentTest, MixTest1) {  // NOLINT
   MixTest1Call();
 }
-
 TEST(BPlusTreeConcurrentTest, DISABLED_MixTest2) {  // NOLINT
   MixTest2Call();
 }

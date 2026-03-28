@@ -33,7 +33,7 @@ TEST(BufferPoolManagerTest, VeryBasicTest) {
   // A very basic test.
 
   auto disk_manager = std::make_shared<DiskManager>(db_fname);
-  auto bpm = std::make_shared<BufferPoolManager>(FRAMES, disk_manager.get(), K_DIST);
+  auto bpm = std::make_shared<BufferPoolManager>(1, disk_manager.get(), K_DIST);
 
   page_id_t pid = bpm->NewPage();
 
@@ -316,6 +316,7 @@ TEST(BufferPoolManagerTest, ContentionTest) {
   thread2.join();
   thread4.join();
   thread1.join();
+  bpm->Statistics();
 }
 
 TEST(BufferPoolManagerTest, DeadlockTest) {

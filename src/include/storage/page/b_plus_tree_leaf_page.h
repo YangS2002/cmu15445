@@ -10,18 +10,23 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include <cstddef>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "binder/statement/insert_statement.h"
 #include "storage/page/b_plus_tree_page.h"
+#include "type/value.h"
 
 namespace bustub {
 
 #define B_PLUS_TREE_LEAF_PAGE_TYPE BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>
-#define LEAF_PAGE_HEADER_SIZE 16
+#define LEAF_PAGE_HEADER_SIZE 16  // 比中间节点多了个next_page_id
 #define LEAF_PAGE_SLOT_CNT ((BUSTUB_PAGE_SIZE - LEAF_PAGE_HEADER_SIZE) / (sizeof(KeyType) + sizeof(ValueType)))
 
+static constexpr int INVALID_INSERT_POS = -1;
 /**
  * Store indexed key and record id (record id = page id combined with slot id,
  * see `include/common/rid.h` for detailed implementation) together within leaf
@@ -46,10 +51,13 @@ namespace bustub {
  * | NextPageId (4) |
  *  -----------------
  */
+
 INDEX_TEMPLATE_ARGUMENTS
 class BPlusTreeLeafPage : public BPlusTreePage {
  public:
   // Delete all constructor / destructor to ensure memory safety
+  // 节点页实际上是页的视图，删除构造函数和拷贝防止在栈上创建对象。
+  // 用来解释一段内存的内存布局的
   BPlusTreeLeafPage() = delete;
   BPlusTreeLeafPage(const BPlusTreeLeafPage &other) = delete;
 
@@ -63,7 +71,19 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   // Helper methods
   auto GetNextPageId() const -> page_id_t;
   void SetNextPageId(page_id_t next_page_id);
-  auto KeyAt(int index) const -> KeyType;
+  auto KeyAt(int index) const -> KeyType { return key_array_[index]; };
+  auto ValueAt(int index) const -> ValueType { return rid_array_[index]; };
+  auto GetValue(const KeyType &target_key, const KeyComparator &comparator, std::vector<ValueType> *result) const
+      -> void;
+  auto FindInsertPosition(const KeyType &key, const KeyComparator &comparator) const -> int;
+  auto InsertKeyAt(const KeyType &key, const ValueType &value, int insert_pos) -> void;
+  auto IsFull() const -> bool { return GetSize() == GetMaxSize(); }
+  auto MoveHalfto(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> &new_leaf_node) -> void;
+  auto ArrayShift(size_t pos, size_t len, bool is_left) -> void;
+  auto RemoveKey(const KeyType &key, KeyComparator &comparator) -> bool;
+  auto MoveDataTo(BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> &dest_node, int src_start, int src_len,
+                  int dest_start) -> void;
+  auto GetKeyIndex(const KeyType &key, const KeyComparator &comparator) const -> int;
 
   /**
    * @brief For test only return a string representing all keys in

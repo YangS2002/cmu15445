@@ -13,6 +13,7 @@
 #include <cassert>
 #include <climits>
 #include <cstdlib>
+#include <shared_mutex>
 #include <string>
 
 #include "buffer/buffer_pool_manager.h"
@@ -40,6 +41,14 @@ enum class IndexPageType { INVALID_INDEX_PAGE = 0, LEAF_PAGE, INTERNAL_PAGE };
  */
 class BPlusTreePage {
  public:
+  enum class InsertResult {
+    SUCCESS = 0,
+    NeedSplit,      // 需要分裂
+    DUPLICATE_KEY,  // 重复键
+    Error
+  };
+
+ public:
   // Delete all constructor / destructor to ensure memory safety
   BPlusTreePage() = delete;
   BPlusTreePage(const BPlusTreePage &other) = delete;
@@ -62,7 +71,7 @@ class BPlusTreePage {
   // Number of key & value pairs in a page
   int size_ __attribute__((__unused__));
   // Max number of key & value pairs in a page
-  int max_size_ __attribute__((__unused__));
+  int max_size_ __attribute__((__unused__));  // m degree of the B+ tree, max_size_ = m - 1 for internal page
 };
 
 }  // namespace bustub
