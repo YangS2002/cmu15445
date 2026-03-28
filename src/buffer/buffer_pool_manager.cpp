@@ -255,10 +255,10 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
       auto frame = frames_[fid];
 
       frame->pin_count_.fetch_add(1);
-      
+
       replacer_->RecordAccess(fid, access_type);
       replacer_->SetEvictable(fid, false);
-      lock.unlock();  
+      lock.unlock();
       return WritePageGuard(page_id, frame, replacer_, bpm_latch_);
     }
 

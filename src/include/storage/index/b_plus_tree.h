@@ -73,8 +73,11 @@ class BPlusTree {
   // 分裂一个叶子节点
   auto SplitLeaf(WritePageGuard &&leaf_guard) -> std::pair<WritePageGuard, KeyType>;
 
-  // 找到目标叶子节点，返回叶子节点的页号
+  // 悲观查找。找到目标叶子节点，返回叶子节点的页号
   auto FindTargetPageId(const KeyType &key, Context *ctx, bool is_insert) const -> void;
+
+  // 乐观查找，拿读锁到叶子节点的父节点，父节点拿写锁，叶子节点拿写锁，如果父节点安全，则返回true，否则返回false，再走一遍悲观查找
+  auto FindTargetPageIdPessimistic(const KeyType &key, Context *ctx, bool is_insert) const -> bool;
 
   auto InsertToInternalNode(WritePageGuard &internal_page_guard, const KeyType &key, const page_id_t &value)
       -> std::optional<std::pair<KeyType, page_id_t>>;

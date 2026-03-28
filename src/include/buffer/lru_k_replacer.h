@@ -173,34 +173,6 @@ class LRUKReplacer {
    */
   auto Size() -> size_t;
 
- private:
-  struct EvictEntry {
-    frame_id_t frame_id_;
-    bool is_infinite_;  // history size < k
-    size_t time_;       // infinite 时存最早访问时间；否则存 backward k-distance
-  };
-  struct EvictCmp {
-    auto operator()(const EvictEntry &a, const EvictEntry &b) const -> bool {
-      // 1. history size < k 的优先被驱逐
-      if (a.is_infinite_ != b.is_infinite_) {
-        return static_cast<int>(a.is_infinite_) > static_cast<int>(b.is_infinite_);
-      }
-      // 2. 都是 infinite：按最早访问时间，小的优先
-      if (a.is_infinite_) {
-        if (a.time_ != b.time_) {
-          return a.time_ < b.time_;
-        }
-      }
-      // 3. 都不是 infinite：按前k最早访问时间
-      if (a.time_ != b.time_) {
-        return a.time_ < b.time_;
-      }
-
-      // 4. 最后用 frame_id 打破平局，保证严格弱序
-      return a.frame_id_ < b.frame_id_;
-    }
-  };
-
  public:
   size_t recordaccess_num_ = 0;
   size_t evict_num_ = 0;
@@ -209,8 +181,8 @@ class LRUKReplacer {
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
   std::unordered_map<frame_id_t, LRUKNode> node_store_;
+  std::unordered_map<frame_id_t, LRUKNode> node_store_candidate_;
 
-  std::set<EvictEntry, EvictCmp> evict_;
   size_t current_timestamp_{0};  // 当前的时间戳，当访问一个frame时，时间戳加1
   [[maybe_unused]] size_t curr_size_{0};
   size_t replacer_size_;

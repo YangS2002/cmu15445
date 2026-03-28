@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <mutex>
 #include <optional>
+#include <unordered_map>
 #include <utility>
 #include "common/config.h"
 #include "common/exception.h"
@@ -41,96 +42,139 @@ auto LRUKReplacer::Evict() -> std::optional<frame_id_t> {
   // 逐出可以逐出的节点
   std::lock_guard<std::mutex> lock(latch_);
   evict_num_++;
-  if (evict_.empty()) {
+  if (curr_size_ == 0) {
     return std::nullopt;
   }
-  auto target_evict_entry = *evict_.begin();  // 弱序排序
-  auto target_frame_id = target_evict_entry.frame_id_;
 
-  curr_size_--;
-  evict_.erase(evict_.begin());
-  node_store_.erase(target_frame_id);
-  return target_frame_id;
+  if (!node_store_candidate_.empty()) {
+    auto iter = node_store_candidate_.begin();
+    size_t earliest = BUSTUB_INT32_MAX;
+    auto target_frame_id = iter->first;
+    while (iter != node_store_candidate_.end()) {
+      if (iter->second.IsEvictable() && iter->second.Getback() < earliest) {
+        earliest = iter->second.Getback();
+        target_frame_id = iter->first;
+      }
+      iter++;
+    }
+    node_store_candidate_.erase(target_frame_id);
+    curr_size_--;
+    return target_frame_id;
+  }
+
+  if (!node_store_.empty()) {
+    auto iter = node_store_.begin();
+    size_t earliest = BUSTUB_INT32_MAX;
+    auto target_frame_id = iter->first;
+    while (iter != node_store_.end()) {
+      if (iter->second.IsEvictable() && iter->second.Getback() < earliest) {
+        earliest = iter->second.Getback();
+        target_frame_id = iter->first;
+      }
+      iter++;
+    }
+    node_store_.erase(target_frame_id);
+    curr_size_--;
+    return target_frame_id;
+  }
+  return std::nullopt;
 }
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType access_type) {
   // 访问某个帧，更新这个帧对应的访问历史
   // 注意，该操作不自行逐出帧
   std::lock_guard<std::mutex> lock(latch_);
-  recordaccess_num_++;
-  auto iter = node_store_.find(frame_id);
-  if (iter == node_store_.end()) {
-    // 之前没有访问过这个帧，创建一个新的LRUKNode
-    if (node_store_.size() >= replacer_size_) {
-      throw Exception(fmt::format("LRUKReplacer rest space is zero\n", replacer_size_));
+  auto iter1 = node_store_candidate_.find(frame_id);
+  if (iter1 != node_store_candidate_.end()) {
+    // 候选中找到
+    auto frame = iter1->second;
+    frame.PushFront(current_timestamp_);
+    if (frame.GetHitorySize() == k_) {
+      node_store_.insert(std::pair<frame_id_t, LRUKNode>{frame_id, frame});
+      node_store_candidate_.erase(frame_id);
     }
-    LRUKNode new_frame(frame_id, k_);
-    new_frame.PushFront(current_timestamp_);
-    node_store_.insert(std::pair<frame_id_t, LRUKNode>{frame_id, new_frame});
-    evict_.insert(EvictEntry{frame_id, new_frame.GetHitorySize() < k_, new_frame.Getback()});
-    curr_size_++;
+    recordaccess_num_++;
     current_timestamp_++;
     return;
   }
-  auto &target_frame = iter->second;
-  auto old_entry = EvictEntry{frame_id, target_frame.GetHitorySize() < k_, target_frame.Getback()};
-
-  target_frame.PushFront(current_timestamp_);
-  // 更新evict_中的记录,如果在evict_中，不在且能直接找到说明是不可逐出的帧
-
-  auto target_entry = evict_.find(old_entry);
-
-  if (target_entry != evict_.end()) {
-    //更新
-    evict_.erase(target_entry);
-
-    evict_.insert(EvictEntry{frame_id, target_frame.GetHitorySize() < k_, target_frame.Getback()});
+  auto iter2 = node_store_.find(frame_id);
+  if (iter2 != node_store_.end()) {
+    auto &frame = iter2->second;
+    frame.PushFront(current_timestamp_);
+    recordaccess_num_++;
+    current_timestamp_++;
+    return;
   }
+
+  // 都不在
+  if (node_store_.size() + node_store_candidate_.size() >= replacer_size_) {
+    // 已经满了，无法记录访问
+    recordaccess_num_++;
+    current_timestamp_++;
+    return;
+  }
+
+  // 插入候选队列
+  auto new_frame_node = LRUKNode(frame_id, k_);
+  new_frame_node.PushFront(current_timestamp_);
+  node_store_candidate_.insert(std::pair<frame_id_t, LRUKNode>{frame_id, new_frame_node});
+  curr_size_++;
+
+  recordaccess_num_++;
   current_timestamp_++;
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
   std::lock_guard<std::mutex> lock(latch_);
   // 将某个帧设置为不可逐出（可能在写日志等操作）
-  auto iter = node_store_.find(frame_id);
-  if (iter == node_store_.end()) {
-    return;
-  }
-  auto old_entry = EvictEntry{frame_id, iter->second.GetHitorySize() < k_, iter->second.Getback()};
-  auto iter_evict = evict_.find(old_entry);
-  if (!set_evictable) {
-    if (iter_evict != evict_.end()) {
-      // 按照设计，不在evict_且在内存中的一定是设置了不可逐出标记的
-      evict_.erase(iter_evict);
+  auto iter1 = node_store_candidate_.find(frame_id);
+  if (iter1 != node_store_candidate_.end()) {
+    auto &frame = iter1->second;
+    if (frame.IsEvictable() && !set_evictable) {
       curr_size_--;
-    }
-  } else {
-    // 设置为可逐出要考虑 加入逐出队列
-    if (!iter->second.IsEvictable()) {
-      evict_.insert(old_entry);
+    } else if (!frame.IsEvictable() && set_evictable) {
       curr_size_++;
     }
+    frame.SetEvictable(set_evictable);
+    return;
   }
-  iter->second.SetEvictable(set_evictable);
+  auto iter2 = node_store_.find(frame_id);
+  if (iter2 != node_store_.end()) {
+    auto &frame = iter2->second;
+    if (frame.IsEvictable() && !set_evictable) {
+      curr_size_--;
+    } else if (!frame.IsEvictable() && set_evictable) {
+      curr_size_++;
+    }
+    frame.SetEvictable(set_evictable);
+    return;
+  }
 }
 
 void LRUKReplacer::Remove(frame_id_t frame_id) {
   // 删除对应的帧，如果删除到一个不可逐出的帧，抛出异常
   std::lock_guard<std::mutex> lock(latch_);
-  auto iter = node_store_.find(frame_id);
-  if (iter != node_store_.end()) {
-    if (iter->second.IsEvictable()) {
-      curr_size_--;
-    } else {
-      throw Exception(fmt::format("frame {} is non-evictable, cannot be removed by LRUKReplacer\n", frame_id));
+  auto iter1 = node_store_candidate_.find(frame_id);
+  if (iter1 != node_store_candidate_.end()) {
+    auto &frame = iter1->second;
+    if (!frame.IsEvictable()) {
+      throw Exception(fmt::format("frame {} is not evictable\n", frame_id));
     }
-    auto old_entry = EvictEntry{frame_id, iter->second.GetHitorySize() < k_, iter->second.Getback()};
-    evict_.erase(old_entry);
-    node_store_.erase(frame_id);
+    node_store_candidate_.erase(frame_id);
+    curr_size_--;
+    return;
   }
-  // } else {
-  //   throw Exception(fmt::format("exception frame id {} is not found\n", frame_id));
-  // }
+  auto iter2 = node_store_.find(frame_id);
+  if (iter2 != node_store_.end()) {
+    auto &frame = iter2->second;
+    if (!frame.IsEvictable()) {
+      throw Exception(fmt::format("frame {} is not evictable\n", frame_id));
+    }
+    node_store_.erase(frame_id);
+    curr_size_--;
+    return;
+  }
+  // 没找到，直接返回
 }
 // 可逐出的数量
 auto LRUKReplacer::Size() -> size_t {

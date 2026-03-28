@@ -63,11 +63,77 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
   root_page->root_page_id_ = INVALID_PAGE_ID;  // 存储根节点的页，用于将根节点持久化到磁盘。
 }
 
+// 乐观查找
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::FindTargetPageIdPessimistic(const KeyType &key, Context *ctx, bool is_insert) const -> bool {
+  auto cur_page_guard = bpm_->ReadPage(ctx->root_page_id_);
+  auto target_page_id = ctx->root_page_id_;
+  while (!cur_page_guard.As<BPlusTreePage>()->IsLeafPage()) {
+    auto internal_page = cur_page_guard.As<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator>>();
+    target_page_id = internal_page->ValueAt(internal_page->GetKeyIndex(key, comparator_));
+    ctx->read_set_.push_back(std::move(cur_page_guard));  // 记录访问过的页，后续可能需要写回
+    cur_page_guard = bpm_->ReadPage(target_page_id);      // 移动语义，旧的释放
+  }
+  // 检测父节点是否是安全的
+  cur_page_guard.Drop();
+  auto cur_page_write_guard = bpm_->WritePage(target_page_id);
+  if (ctx->read_set_.empty()) {
+    // 当前节点是根节点，可以返回true
+    ctx->write_set_.push_back(std::move(cur_page_write_guard));
+    return true;
+  }
+  // 检查父节点
+  auto parent_page_guard = std::move(ctx->read_set_.back());
+  ctx->read_set_.pop_back();
+  if (is_insert) {
+    auto parent_page = parent_page_guard.template As<BPlusTreeInternalPage<KeyType, ValueType, KeyComparator>>();
+    if (parent_page->GetSize() < parent_page->GetMaxSize()) {
+      // 父节点安全，可以返回true
+      auto parent_page_id = parent_page_guard.GetPageId();
+      parent_page_guard.Drop();
+      // 只需要孩子节点的写锁，父节点的读锁就够了
+      auto parent_page_write_gurad = bpm_->WritePage(parent_page_id);
+      ctx->write_set_.push_back(std::move(parent_page_write_gurad));
+      ctx->write_set_.push_back(std::move(cur_page_write_guard));
+      while (!ctx->read_set_.empty()) {
+        ctx->read_set_.pop_front();
+      }
+      return true;
+    }
+  } else {
+    // 删除
+    auto parent_page = parent_page_guard.template As<BPlusTreeInternalPage<KeyType, ValueType, KeyComparator>>();
+    if (parent_page->GetSize() > parent_page->GetMinSize() && parent_page->GetSize() > 2) {
+      // 父节点安全，可以返回true
+      auto parent_page_id = parent_page_guard.GetPageId();
+      parent_page_guard.Drop();
+      // 只需要孩子节点的写锁，父节点的读锁就够了
+      auto parent_page_write_gurad = bpm_->WritePage(parent_page_id);
+      ctx->write_set_.push_back(std::move(parent_page_write_gurad));
+      ctx->write_set_.push_back(std::move(cur_page_write_guard));
+      while (!ctx->read_set_.empty()) {
+        ctx->read_set_.pop_front();
+      }
+      return true;
+    }
+  }
+  // 父节点不安全，需要返回false，重新走一遍悲观查找
+  while (!ctx->read_set_.empty()) {
+    ctx->read_set_.pop_back();
+  }
+  return false;
+}
+
 // 找到插入键的叶子节点，返回page_id
+// 悲观锁机制
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::FindTargetPageId(const KeyType &key, Context *ctx, bool is_insert) const -> void {
+  if (FindTargetPageIdPessimistic(key, ctx, is_insert)) {
+    return;
+  }
   auto cur_page_guard = bpm_->WritePage(ctx->root_page_id_);
   auto target_page_id = ctx->root_page_id_;
+
   while (!cur_page_guard.As<BPlusTreePage>()->IsLeafPage()) {
     auto internal_page = cur_page_guard.As<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator>>();
     target_page_id = internal_page->ValueAt(internal_page->GetKeyIndex(key, comparator_));
@@ -80,7 +146,7 @@ auto BPLUSTREE_TYPE::FindTargetPageId(const KeyType &key, Context *ctx, bool is_
           ctx->write_set_.pop_front();
         }
         // 不会修改根节点了
-        ctx->header_page_->Drop();
+        // ctx->header_page_->Drop();
       }
     } else {
       // 删除操作，可能会导致重组或者合并
@@ -88,7 +154,7 @@ auto BPLUSTREE_TYPE::FindTargetPageId(const KeyType &key, Context *ctx, bool is_
         while (!ctx->write_set_.empty()) {
           ctx->write_set_.pop_front();
         }
-        ctx->header_page_->Drop();
+        // ctx->header_page_->Drop();
       }
     }
     ctx->write_set_.push_back(std::move(cur_page_guard));  // 记录访问过的页，后续可能需要写回
