@@ -31,7 +31,7 @@ void TablePage::Init() {
 auto TablePage::GetNextTupleOffset(const TupleMeta &meta, const Tuple &tuple) const -> std::optional<uint16_t> {
   size_t slot_end_offset;
   if (num_tuples_ > 0) {
-    auto &[offset, size, meta] = tuple_info_[num_tuples_ - 1];
+    auto &[offset, size, meta] = tuple_info_[num_tuples_ - 1];  // 定义的不是数组，但是这种写法会编译成越界数组。
     slot_end_offset = offset;
   } else {
     slot_end_offset = BUSTUB_PAGE_SIZE;

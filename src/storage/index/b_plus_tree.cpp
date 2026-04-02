@@ -571,6 +571,10 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key) {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
+  if (IsEmpty()) {
+    // 空树不能读根
+    return End();
+  }
   auto guard = bpm_->ReadPage(header_page_id_);
   auto root_page_id = guard.As<BPlusTreeHeaderPage>()->root_page_id_;
   auto cur_page_guard = bpm_->ReadPage(root_page_id);

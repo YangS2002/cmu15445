@@ -12,8 +12,12 @@
 
 #pragma once
 
+#include <cstddef>
+#include <memory>
+#include <optional>
 #include <vector>
 
+#include "catalog/catalog.h"
 #include "common/rid.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
@@ -44,5 +48,10 @@ class IndexScanExecutor : public AbstractExecutor {
  private:
   /** The index scan plan node to be executed. */
   const IndexScanPlanNode *plan_;
+  std::optional<IndexIterator<IntegerKeyType_BTree, IntegerValueType_BTree, IntegerComparatorType_BTree>> index_iter_;
+  std::shared_ptr<IndexInfo> target_index_{nullptr};
+  std::shared_ptr<TableInfo> table_info_{nullptr};
+  BPlusTreeIndexForTwoIntegerColumn *tree_{nullptr};
+  size_t constance_index_{0};
 };
 }  // namespace bustub
