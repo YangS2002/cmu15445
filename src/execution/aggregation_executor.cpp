@@ -29,6 +29,7 @@ AggregationExecutor::AggregationExecutor(ExecutorContext *exec_ctx, const Aggreg
 
 void AggregationExecutor::Init() {
   // 从表中获取所有的行，并加入到哈希表中
+  aht_.Clear();
   auto group_by = plan_->GetGroupBys();
   Tuple tuple;
   RID rid;
@@ -39,10 +40,12 @@ void AggregationExecutor::Init() {
     aht_.InsertCombine(key, value);
   }
   aht_iterator_ = aht_.Begin();
+  is_done_ = false;
+  is_empty = true;
 }
 
 auto AggregationExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  if (is_done) {
+  if (is_done_) {
     return false;
   }
 
@@ -64,16 +67,15 @@ auto AggregationExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     is_empty = false;
     return true;
   }
-  is_done = true;
-  if (aht_iterator_ == aht_.End() && is_empty) {
-    // 返回初始值
+  is_done_ = true;
+  if (aht_iterator_ == aht_.End() && is_empty && plan_->group_bys_.empty()) {
+    //如果没有order by, 返回初始值，
     std::vector<Value> results;
-    // key
-    for (auto const &group_key : plan_->GetGroupBys()) {
-      results.emplace_back(group_key->Evaluate(nullptr, GetOutputSchema()));
-    }
     // agg
     auto agg_types = plan_->GetAggregateTypes();
+    for (size_t i = 0; i < plan_->group_bys_.size(); i++) {
+      results.emplace_back(ValueFactory::GetNullValueByType(TypeId::INTEGER));
+    }
     for (size_t i = 0; i < plan_->agg_types_.size(); i++) {
       Value value;
       if (agg_types[i] == AggregationType::CountStarAggregate) {
@@ -86,7 +88,7 @@ auto AggregationExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     *tuple = Tuple(results, &GetOutputSchema());
     return true;
   }
-
+  // 有 order by，但是表为空，所以无法分组，不返回任何东西
   return false;
 }
 

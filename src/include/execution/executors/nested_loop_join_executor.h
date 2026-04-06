@@ -13,10 +13,14 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 #include <utility>
 
+#include "catalog/schema.h"
+#include "common/rid.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
+#include "execution/expressions/abstract_expression.h"
 #include "execution/plans/nested_loop_join_plan.h"
 #include "storage/table/tuple.h"
 
@@ -55,6 +59,17 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
  private:
   /** The NestedLoopJoin plan node to be executed. */
   const NestedLoopJoinPlanNode *plan_;
+  std::unique_ptr<AbstractExecutor> left_executor_{nullptr};
+  std::unique_ptr<AbstractExecutor> right_executor_{nullptr};
+  bool is_done_{false};
+  bool will_left_next_{true};
+  Tuple left_tuple_ = Tuple{};
+  RID left_rid_ = RID{};
+  Schema left_schema_ = left_executor_->GetOutputSchema();
+  Tuple right_tuple_ = Tuple{};
+  RID right_rid_ = RID{};
+  Schema right_schema_ = right_executor_->GetOutputSchema();
+  int count = 0;
 };
 
 }  // namespace bustub

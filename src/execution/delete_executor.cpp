@@ -27,7 +27,7 @@ DeleteExecutor::DeleteExecutor(ExecutorContext *exec_ctx, const DeletePlanNode *
 void DeleteExecutor::Init() { child_executor_->Init(); }
 
 auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
-  if (is_done) {
+  if (is_done_) {
     return false;
   }
 
@@ -54,7 +54,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   }
   *tuple = Tuple({Value(TypeId::INTEGER, count)}, &GetOutputSchema());
 
-  is_done = true;
+  is_done_ = true;
   return true;
 }
 

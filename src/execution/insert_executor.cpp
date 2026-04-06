@@ -34,7 +34,7 @@ InsertExecutor::InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *
 void InsertExecutor::Init() { table_info_ = exec_ctx_->GetCatalog()->GetTable(plan_->GetTableOid()); }
 
 auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
-  if (is_done) {
+  if (is_done_) {
     return false;
   }
   Tuple child_tuple;
@@ -66,7 +66,7 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       index->index_->InsertEntry(child_tuple_index, child_rid, txn);
     }
   }
-  is_done = true;
+  is_done_ = true;
   std::vector<Value> values;
   values.emplace_back(TypeId::INTEGER, count);
   *tuple = Tuple(values, &plan_->OutputSchema());

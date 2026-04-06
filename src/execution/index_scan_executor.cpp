@@ -38,6 +38,7 @@ void IndexScanExecutor::Init() {
   if (plan_->pred_keys_.size() > 0) {
     target_index_ = catalog->GetIndex(plan_->GetIndexOid());
   }
+  constance_index_ = 0;
 }
 
 auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {

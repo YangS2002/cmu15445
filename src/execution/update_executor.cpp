@@ -28,11 +28,11 @@ UpdateExecutor::UpdateExecutor(ExecutorContext *exec_ctx, const UpdatePlanNode *
   plan_ = plan;
 }
 
-void UpdateExecutor::Init() {}
+void UpdateExecutor::Init() { is_done_ = false; }
 
 auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   // 只有一个孩子计划节点（seqscan）
-  if (is_done) {
+  if (is_done_) {
     return false;
   }
   child_executor_->Init();
@@ -69,7 +69,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       index->index_->InsertEntry(new_key, new_childe_rid.value(), txn);
     }
   }
-  is_done = true;
+  is_done_ = true;
   *tuple = Tuple({Value(TypeId::INTEGER, count)}, &plan_->OutputSchema());
   return true;
 }
