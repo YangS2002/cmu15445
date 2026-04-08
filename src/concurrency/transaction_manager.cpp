@@ -43,8 +43,8 @@ auto TransactionManager::Begin(IsolationLevel isolation_level) -> Transaction * 
   txn_map_.insert(std::make_pair(txn_id, std::move(txn)));
 
   // TODO(fall2023): set the timestamps here. Watermark updated below.
-
-  running_txns_.AddTxn(txn_ref->read_ts_);
+  txn_ref->commit_ts_.store(last_commit_ts_.load()); // 新事务分配最新的时间戳作为read ts
+  running_txns_.AddTxn(txn_ref->read_ts_.load());
   return txn_ref;
 }
 

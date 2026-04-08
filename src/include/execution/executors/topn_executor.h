@@ -12,16 +12,19 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
+#include <optional>
+#include <queue>
 #include <utility>
 #include <vector>
 
+#include "execution/execution_common.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/seq_scan_plan.h"
 #include "execution/plans/topn_plan.h"
 #include "storage/table/tuple.h"
-
 namespace bustub {
 
 /**
@@ -57,11 +60,29 @@ class TopNExecutor : public AbstractExecutor {
 
   /** @return The size of top_entries_ container, which will be called on each child_executor->Next(). */
   auto GetNumInHeap() -> size_t;
+  class TopNHeapComparator {
+   public:
+    explicit TopNHeapComparator(const TupleComparator &cmp) : cmp_(cmp) {}
+
+    auto operator()(const SortEntry &a, const SortEntry &b) const -> bool {
+      // 让“更优”的元素下沉，让“更差”的元素在 top
+      return cmp_(a, b);
+    }
+
+   private:
+    TupleComparator cmp_;
+  };
 
  private:
   /** The TopN plan node to be executed */
   const TopNPlanNode *plan_;
   /** The child executor from which tuples are obtained */
   std::unique_ptr<AbstractExecutor> child_executor_;
+  // priority 的比较器，cmp(a,b)为true，表示b的优先级更高，会在前面。所以实际上是一个最大堆，
+  std::optional<TupleComparator> cmp_;
+  std::optional<std::priority_queue<SortEntry, std::vector<SortEntry>, TopNHeapComparator>> top_entries_;
+  std::vector<SortEntry> sorted_tuples_;
+  bool is_done_{false};
+  int next_tuple_idx_{-1};
 };
 }  // namespace bustub

@@ -28,6 +28,7 @@
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/sort_plan.h"
 #include "fmt/core.h"
+#include "storage/page/page_guard.h"
 #include "storage/page/table_page.h"
 #include "storage/table/table_heap.h"
 #include "storage/table/tuple.h"
@@ -87,8 +88,8 @@ class SortPage {
 class MergeSortRun {
  public:
   // MergeSortRun() = default;
-  MergeSortRun(std::vector<page_id_t> pages, BufferPoolManager *bpm,Schema schema)
-      : pages_(std::move(pages)), schema_(schema), bpm_(bpm) {}
+  MergeSortRun(std::vector<page_id_t> pages, BufferPoolManager *bpm, Schema schema)
+      : pages_(std::move(pages)), schema_(std::move(schema)), bpm_(bpm) {}
 
   auto GetPageCount() -> size_t { return pages_.size(); }
   /** Iterator for iterating on the sorted tuples in one run. */
@@ -109,14 +110,18 @@ class MergeSortRun {
         throw std::out_of_range("Iterator out of range");
       }
 
-      auto guard = run_->bpm_->ReadPage(run_->pages_[page_idx_]);
-      auto page = guard.As<SortPage>();
+      auto page = page_guard_.As<SortPage>();
 
       cur_tuple_idx_++;
       if (cur_tuple_idx_ >= page->GetTupleCount()) {
         page_idx_++;
         cur_tuple_idx_ = 0;
+
+        if (page_idx_ < run_->pages_.size()) {
+          page_guard_ = run_->bpm_->ReadPage(run_->pages_[page_idx_]);
+        }
       }
+
       return *this;
     }
 
@@ -130,8 +135,8 @@ class MergeSortRun {
       if (page_idx_ == run_->pages_.size()) {
         throw std::out_of_range("Iterator out of range");
       }
-      auto guard = run_->bpm_->ReadPage(run_->pages_[page_idx_]);
-      auto page = guard.As<SortPage>();
+
+      auto page = page_guard_.As<SortPage>();
       return page->GetTuple(cur_tuple_idx_, run_->schema_);
     }
 
@@ -159,6 +164,7 @@ class MergeSortRun {
 
     /** The sorted run that the iterator is iterating on. */
     [[maybe_unused]] const MergeSortRun *run_;
+    ReadPageGuard page_guard_;
     uint32_t page_idx_;
     uint32_t cur_tuple_idx_;
     /**
@@ -181,6 +187,7 @@ class MergeSortRun {
     iter.run_ = this;
     iter.page_idx_ = 0;
     iter.cur_tuple_idx_ = 0;
+    iter.page_guard_ = bpm_->ReadPage(pages_[0]);
     return iter;
   }
 
