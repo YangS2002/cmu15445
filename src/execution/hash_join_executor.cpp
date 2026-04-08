@@ -18,7 +18,6 @@
 #include "binder/table_ref/bound_join_ref.h"
 #include "catalog/schema.h"
 
-
 #include "storage/table/tuple.h"
 #include "type/value.h"
 #include "type/value_factory.h"
@@ -45,8 +44,8 @@ void HashJoinExecutor::Init() {
   right_next_idx_ = 0;
   left_child_->Init();
   right_child_->Init();
-  left_keys.clear();
-  hash_table_.clear();
+  left_keys_.clear();
+  hash_table_.Clear();
   // 构建右表的哈希表
   Tuple right_tuple;
   RID right_rid;
@@ -67,11 +66,10 @@ void HashJoinExecutor::Init() {
       auto value = right_tuple.GetValue(&right_schema, i);
       right_values.push_back(value);  // 右表完整元组的值
     }
-    for (size_t i = 0; i < plan_->RightJoinKeyExpressions().size(); i++) {
-        auto cv_expr = plan_->RightJoinKeyExpressions()[i];
-        auto column_value = dynamic_cast<const ColumnValueExpression *>(cv_expr.get());  // 列值表达式
-        auto col_idx = column_value->GetColIdx();
-        right_keys.push_back(right_tuple.GetValue(&right_child_->GetOutputSchema(), col_idx));
+    for (const auto &cv_expr : plan_->RightJoinKeyExpressions()) {
+      auto column_value = dynamic_cast<const ColumnValueExpression *>(cv_expr.get());  // 列值表达式
+      auto col_idx = column_value->GetColIdx();
+      right_keys.push_back(right_tuple.GetValue(&right_child_->GetOutputSchema(), col_idx));
     }
     // 聚合Key
     JoinHashKey join_hash_key{right_keys};
@@ -90,18 +88,17 @@ auto HashJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
         is_done_ = true;
         return false;
       }
-      left_keys.clear();
-      for (size_t i = 0; i < plan_->LeftJoinKeyExpressions().size(); i++) {
-        auto cv_expr = plan_->LeftJoinKeyExpressions()[i];
+      left_keys_.clear();
+      for (const auto &cv_expr : plan_->LeftJoinKeyExpressions()) {
         auto column_value = dynamic_cast<const ColumnValueExpression *>(cv_expr.get());  // 列值表达式
         auto col_idx = column_value->GetColIdx();
-        left_keys.push_back(left_tuple_.GetValue(&left_child_->GetOutputSchema(), col_idx));
+        left_keys_.push_back(left_tuple_.GetValue(&left_child_->GetOutputSchema(), col_idx));
       }
       will_left_next_ = false;
       is_right_empty_ = true;
     }
 
-    JoinHashKey join_hash_key{left_keys};  // 构造左表的查询键
+    JoinHashKey join_hash_key{left_keys_};  // 构造左表的查询键
     auto right_tuple_opt =
         hash_table_.GetAggregateJoinHashValue(join_hash_key, right_next_idx_);  // 从哈希表中获取右表的值
     if (right_tuple_opt.has_value()) {

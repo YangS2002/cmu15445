@@ -49,7 +49,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   for (auto child_rid : old_rids) {
     std::vector<Value> values;
     auto [meta, child_tuple] = table_info_->table_->GetTuple(child_rid);
-    for (auto expr : plan_->target_expressions_) {
+    for (const auto &expr : plan_->target_expressions_) {
       values.emplace_back(expr->Evaluate(&child_tuple, plan_->GetChildPlan()->OutputSchema()));
     }
     Tuple new_tuple(values, &table_info_->schema_);

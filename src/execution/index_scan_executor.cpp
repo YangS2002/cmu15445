@@ -35,7 +35,7 @@ void IndexScanExecutor::Init() {
   index_iter_ = tree_->GetBeginIterator();
   table_info_ = catalog->GetTable(index_info->table_name_);
   // 准备点查询的初始化
-  if (plan_->pred_keys_.size() > 0) {
+  if (!plan_->pred_keys_.empty()) {
     target_index_ = catalog->GetIndex(plan_->GetIndexOid());
   }
   constance_index_ = 0;
@@ -47,7 +47,7 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
   auto txn = exec_ctx_->GetTransaction();
   std::vector<Value> values;
-  if (plan_->pred_keys_.size() > 0) {
+  if (!plan_->pred_keys_.empty()) {
     // 点查询
     std::vector<RID> results;
     while (constance_index_ < plan_->pred_keys_.size()) {
@@ -57,7 +57,7 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       Tuple key = Tuple{std::vector<Value>{ValueFactory::GetIntegerValue(int64_key)}, &target_index_->key_schema_};
 
       target_index_->index_->ScanKey(key, &results, txn);
-      if (results.size() == 0) {
+      if (results.empty()) {
         continue;
       }
       if (results.size() == 1) {

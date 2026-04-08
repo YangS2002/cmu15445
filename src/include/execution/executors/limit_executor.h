@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <utility>
 
@@ -53,6 +54,8 @@ class LimitExecutor : public AbstractExecutor {
   const LimitPlanNode *plan_;
 
   /** The child executor from which tuples are obtained */
+  size_t output_count_{0};  // 已经输出的 tuple 数量
   std::unique_ptr<AbstractExecutor> child_executor_;
+  bool is_done_ = {false};
 };
 }  // namespace bustub

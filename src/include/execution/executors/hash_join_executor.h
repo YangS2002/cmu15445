@@ -23,11 +23,11 @@
 #include "common/util/hash_util.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
+#include "execution/expressions/column_value_expression.h"
+#include "execution/plans/abstract_plan.h"
 #include "execution/plans/hash_join_plan.h"
 #include "storage/table/tuple.h"
 #include "type/value.h"
-#include "execution/plans/abstract_plan.h"
-#include "execution/expressions/column_value_expression.h"
 namespace bustub {
 struct JoinHashKey {
   /** The group-by values */
@@ -52,7 +52,7 @@ struct JoinHashKey {
 };
 struct JoinHashValue {
   /** The group-by values */
-  std::vector<std::vector<Value>> values;
+  std::vector<std::vector<Value>> values_;
 };
 struct JoinHashKeyHasher {
   auto operator()(const JoinHashKey &key) const -> std::size_t {
@@ -68,27 +68,25 @@ struct JoinHashKeyHasher {
 
 class JoinHashTable {
  public:
-  auto clear() -> void{
-    hash_table_.clear();
-  }
-  auto isInHashTable(JoinHashKey key) -> bool { return hash_table_.find(key) != hash_table_.end(); }
+  auto Clear() -> void { hash_table_.clear(); }
+  auto IsInHashTable(const JoinHashKey &key) -> bool { return hash_table_.find(key) != hash_table_.end(); }
 
   auto InsertJoinHashValue(JoinHashKey &join_hash_key, std::vector<Value> &value) -> void {
     auto iter = hash_table_.find(join_hash_key);
     if (iter == hash_table_.end()) {
       JoinHashValue jhv;
-      jhv.values = std::vector<std::vector<Value>>{};
-      jhv.values.push_back(value);
+      jhv.values_ = std::vector<std::vector<Value>>{};
+      jhv.values_.push_back(value);
       hash_table_.insert({join_hash_key, jhv});
     } else {
-      iter->second.values.push_back(value);
+      iter->second.values_.push_back(value);
     }
   }
 
   auto GetAggregateJoinHashValue(JoinHashKey &join_hash_key, size_t &index) -> std::optional<std::vector<Value>> {
     auto iter = hash_table_.find(join_hash_key);
     if (iter != hash_table_.end()) {
-      auto &right_values = iter->second.values;
+      auto &right_values = iter->second.values_;
       if (!right_values.empty()) {
         if (index < right_values.size()) {
           auto ret = right_values[index];
@@ -134,27 +132,27 @@ class HashJoinExecutor : public AbstractExecutor {
   /** @return The output schema for the join */
   auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); };
 
-  auto GetNextLeftKey(Tuple *tuple,RID * rid) ->bool{
+  auto GetNextLeftKey(Tuple *tuple, RID *rid) -> bool {
     if (!left_child_->Next(tuple, rid)) {
-        is_done_ = true;
-        return false;
-      }
-      left_keys.clear();
-      for (size_t i = 0; i < plan_->LeftJoinKeyExpressions().size(); i++) {
-        auto cv_expr = plan_->LeftJoinKeyExpressions()[i];
-        auto column_value = dynamic_cast<const ColumnValueExpression *>(cv_expr.get());  // 列值表达式
-        auto col_idx = column_value->GetColIdx();
-        left_keys.push_back(tuple->GetValue(&left_child_->GetOutputSchema(), col_idx));
-      }
+      is_done_ = true;
+      return false;
+    }
+    left_keys_.clear();
+    for (const auto &cv_expr : plan_->LeftJoinKeyExpressions()) {
+      auto column_value = dynamic_cast<const ColumnValueExpression *>(cv_expr.get());  // 列值表达式
+      auto col_idx = column_value->GetColIdx();
+      left_keys_.push_back(tuple->GetValue(&left_child_->GetOutputSchema(), col_idx));
+    }
 
     return true;
   }
+
  private:
   /** The HashJoin plan node to be executed. */
   const HashJoinPlanNode *plan_;
   std::unique_ptr<AbstractExecutor> left_child_{nullptr};
   std::unique_ptr<AbstractExecutor> right_child_{nullptr};
-  std::vector<Value> left_keys;
+  std::vector<Value> left_keys_;
   JoinHashTable hash_table_;
   size_t right_next_idx_{0};  // 右表哈希表中当前正在访问的值的索引
   Tuple left_tuple_;

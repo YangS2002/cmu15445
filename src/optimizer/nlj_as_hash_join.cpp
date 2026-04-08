@@ -54,7 +54,7 @@ auto ProcessCurExpr(std::unordered_map<uint32_t, std::vector<AbstractExpressionR
 }
 
 // 判断表达式是不是并列的等值连接条件
-auto isConjunctionOfEquiConditions(const AbstractExpressionRef &expr,
+auto IsConjunctionOfEquiConditions(const AbstractExpressionRef &expr,
                                    std::unordered_map<uint32_t, std::vector<AbstractExpressionRef>> &target_col_exprs)
     -> bool {
   // 列值表达式中定义，tuple_index = 0 表示左表，tuple_index = 1 表示右表
@@ -80,10 +80,7 @@ auto isConjunctionOfEquiConditions(const AbstractExpressionRef &expr,
   }
   // 当前的cur_expr。一定是一个等值的比较表达式
   auto leftist_expr = dynamic_cast<const ComparisonExpression *>(cur_expr);
-  if (!ProcessCurExpr(target_col_exprs, leftist_expr)) {
-    return false;
-  }
-  return true;
+  return ProcessCurExpr(target_col_exprs, leftist_expr);
 }
 
 auto Optimizer::OptimizeNLJAsHashJoin(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
@@ -109,10 +106,10 @@ auto Optimizer::OptimizeNLJAsHashJoin(const AbstractPlanNodeRef &plan) -> Abstra
     }
     auto predicate = nlj_plan.Predicate();
     std::unordered_map<uint32_t, std::vector<AbstractExpressionRef>> target_col_exprs;  // 记录满足条件的列值表达式
-    if (isConjunctionOfEquiConditions(predicate, target_col_exprs)) {
+    if (IsConjunctionOfEquiConditions(predicate, target_col_exprs)) {
       // 满足条件，将嵌套循环连接转换成哈希连接
       auto left_key_exprs = target_col_exprs[0];
-      auto right_key_exprs= target_col_exprs[1];
+      auto right_key_exprs = target_col_exprs[1];
       // std::unordered_map<uint32_t, uint32_t >
       //     col_expr_pairs;  // 记录左边的列值表达式和右边的列值表达式的对应关系,去重和
       for (size_t i = 0; i < left_key_exprs.size(); i++) {
@@ -123,7 +120,6 @@ auto Optimizer::OptimizeNLJAsHashJoin(const AbstractPlanNodeRef &plan) -> Abstra
           // 不是列值表达式，不满足条件
           return optimized_plan;
         }
-
       }
       // 满足条件，转换成哈希连接
       return std::make_shared<HashJoinPlanNode>(nlj_plan.output_schema_, nlj_plan.GetLeftPlan(),

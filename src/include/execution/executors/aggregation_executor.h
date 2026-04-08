@@ -243,7 +243,7 @@ class AggregationExecutor : public AbstractExecutor {
   /** Simple aggregation hash table iterator */
   SimpleAggregationHashTable::Iterator aht_iterator_;
 
-  bool is_empty{true};
+  bool is_empty_{true};
   bool is_done_{false};
 };
 }  // namespace bustub

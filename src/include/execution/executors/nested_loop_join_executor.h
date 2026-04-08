@@ -69,7 +69,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
   Tuple right_tuple_ = Tuple{};
   RID right_rid_ = RID{};
   Schema right_schema_ = right_executor_->GetOutputSchema();
-  int count = 0;
+  int count_ = 0;
 };
 
 }  // namespace bustub

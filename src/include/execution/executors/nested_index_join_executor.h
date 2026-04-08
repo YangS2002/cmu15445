@@ -57,7 +57,7 @@ class NestIndexJoinExecutor : public AbstractExecutor {
   std::optional<std::shared_ptr<TableInfo>> table_info_;
   bool is_done_{false};
   bool will_left_next_{true};  // 是否需要从左表获取新值
-  Tuple left_tuple = Tuple{};
-  RID left_rid = RID{};
+  Tuple left_tuple_ = Tuple{};
+  RID left_rid_ = RID{};
 };
 }  // namespace bustub

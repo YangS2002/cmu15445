@@ -46,14 +46,14 @@ auto NestIndexJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   auto right_schema = plan_->inner_table_schema_;
   while (will_left_next_) {
     // 需要从左表获取新值
-    if (!child_executor_->Next(&left_tuple, &left_rid)) {
+    if (!child_executor_->Next(&left_tuple_, &left_rid_)) {
       // 左表没有新值了
       is_done_ = true;
       return false;
     }
     will_left_next_ = false;
 
-    auto key_value_vector = std::vector<Value>{plan_->key_predicate_->Evaluate(&left_tuple, left_schema)};
+    auto key_value_vector = std::vector<Value>{plan_->key_predicate_->Evaluate(&left_tuple_, left_schema)};
     auto key_schema = index_info_.value()->index_->GetKeySchema();
     auto key = Tuple{key_value_vector, key_schema};
     auto value = std::vector<RID>{};
@@ -66,7 +66,7 @@ auto NestIndexJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
         // 定义了索引，所以不会出现同一列多个值的情况
         std::vector<Value> values;
         for (size_t i = 0; i < left_schema.GetColumnCount(); i++) {
-          values.emplace_back(left_tuple.GetValue(&left_schema, i));
+          values.emplace_back(left_tuple_.GetValue(&left_schema, i));
         }
         for (size_t i = 0; i < right_schema->GetColumnCount(); i++) {
           values.emplace_back(riught_tuple.GetValue(right_schema.get(), i));
@@ -78,13 +78,13 @@ auto NestIndexJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       }
       value.clear();
     }
-    if (value.size() == 0) {
+    if (value.empty()) {
       will_left_next_ = true;  // 左表的下一个键
       // 如果是左连接，插入NULL
       if (plan_->GetJoinType() == JoinType::LEFT) {
         std::vector<Value> values;
         for (size_t i = 0; i < left_schema.GetColumnCount(); i++) {
-          values.emplace_back(left_tuple.GetValue(&left_schema, i));
+          values.emplace_back(left_tuple_.GetValue(&left_schema, i));
         }
         for (size_t i = 0; i < right_schema->GetColumnCount(); i++) {
           values.emplace_back(ValueFactory::GetNullValueByType(right_schema->GetColumn(i).GetType()));

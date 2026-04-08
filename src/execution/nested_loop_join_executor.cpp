@@ -38,7 +38,7 @@ void NestedLoopJoinExecutor::Init() {
   left_schema_ = left_executor_->GetOutputSchema();
   right_schema_ = right_executor_->GetOutputSchema();
   right_executor_->Init();
-  count = 0;
+  count_ = 0;
   will_left_next_ = true;
   is_done_ = false;
 }
@@ -57,7 +57,7 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       }
       will_left_next_ = false;
       right_executor_->Init();
-      count = 0;
+      count_ = 0;
     }
 
     while (right_executor_->Next(&right_tuple_, &right_rid_)) {
@@ -74,13 +74,13 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
         Tuple ret_tuple(values, &GetOutputSchema());
         *tuple = ret_tuple;
         *rid = RID{};
-        count++;
+        count_++;
         return true;
       }
     }
     // 左表的下一个键
     will_left_next_ = true;
-    if (plan_->GetJoinType() == JoinType::LEFT && count == 0) {
+    if (plan_->GetJoinType() == JoinType::LEFT && count_ == 0) {
       // 左连接需要返回左表的值和右表的NULL
       std::vector<Value> values;
       for (size_t i = 0; i < left_schema_.GetColumnCount(); i++) {
@@ -94,7 +94,6 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       *rid = RID{};
       return true;
     }
-    continue;
   }
   return false;
 }

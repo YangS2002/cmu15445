@@ -34,14 +34,14 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   Tuple child_tuple;
   RID child_rid;
   int count = 0;
-  auto table_info_ = exec_ctx_->GetCatalog()->GetTable(plan_->GetTableOid());
-  auto indexs = exec_ctx_->GetCatalog()->GetTableIndexes(table_info_->name_);
+  auto table_info = exec_ctx_->GetCatalog()->GetTable(plan_->GetTableOid());
+  auto indexs = exec_ctx_->GetCatalog()->GetTableIndexes(table_info->name_);
   // 过滤在下层，相信返回的就是需要删除的
   while (child_executor_->Next(&child_tuple, &child_rid)) {
-    auto [meta, tuple_to_delete] = table_info_->table_->GetTuple(child_rid);
+    auto [meta, tuple_to_delete] = table_info->table_->GetTuple(child_rid);
     auto new_meta = meta;
     new_meta.is_deleted_ = true;
-    table_info_->table_->UpdateTupleMeta(new_meta, child_rid);
+    table_info->table_->UpdateTupleMeta(new_meta, child_rid);
     // 删除索引
     for (auto &index : indexs) {
       auto index_schema = index->index_->GetKeySchema();

@@ -11,21 +11,51 @@
 //===----------------------------------------------------------------------===//
 
 #include "execution/execution_common.h"
+#include <cstddef>
 
 #include "catalog/catalog.h"
 #include "common/macros.h"
 #include "concurrency/transaction_manager.h"
 #include "fmt/core.h"
 #include "storage/table/table_heap.h"
+#include "type/type.h"
+#include "type/value.h"
 
 namespace bustub {
 
 TupleComparator::TupleComparator(std::vector<OrderBy> order_bys) : order_bys_(std::move(order_bys)) {}
 
-auto TupleComparator::operator()(const SortEntry &entry_a, const SortEntry &entry_b) const -> bool { return false; }
+auto TupleComparator::operator()(const SortEntry &entry_a, const SortEntry &entry_b) const -> bool {
+  for (size_t i = 0; i < order_bys_.size(); i++) {
+    auto order_by_type = order_bys_[i].first;
+
+    if (order_by_type == OrderByType::ASC || order_by_type == OrderByType::DEFAULT) {
+      if (entry_a.first[i].CompareLessThan(entry_b.first[i]) == CmpBool::CmpTrue) {
+        return true;
+      }
+      if (entry_a.first[i].CompareGreaterThan(entry_b.first[i]) == CmpBool::CmpTrue) {
+        return false;
+      }
+    } else if (order_by_type == OrderByType::DESC) {
+      if (entry_a.first[i].CompareGreaterThan(entry_b.first[i]) == CmpBool::CmpTrue) {
+        return true;
+      }
+      if (entry_a.first[i].CompareLessThan(entry_b.first[i]) == CmpBool::CmpTrue) {
+        return false;
+      }
+    }
+  }
+  return false;
+}
 
 auto GenerateSortKey(const Tuple &tuple, const std::vector<OrderBy> &order_bys, const Schema &schema) -> SortKey {
-  return {};
+  SortKey sortkey;
+  for (const auto &order_by : order_bys) {
+    auto expr = order_by.second;
+    auto ret_value = expr->Evaluate(&tuple, schema);
+    sortkey.push_back(ret_value);
+  }
+  return sortkey;
 }
 
 /**

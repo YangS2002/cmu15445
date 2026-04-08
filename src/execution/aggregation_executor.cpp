@@ -41,7 +41,7 @@ void AggregationExecutor::Init() {
   }
   aht_iterator_ = aht_.Begin();
   is_done_ = false;
-  is_empty = true;
+  is_empty_ = true;
 }
 
 auto AggregationExecutor::Next(Tuple *tuple, RID *rid) -> bool {
@@ -64,11 +64,11 @@ auto AggregationExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       throw Exception(fmt::format("Output schema column count does not match the number of values in the tuple"));
     }
     *tuple = Tuple(results, &GetOutputSchema());
-    is_empty = false;
+    is_empty_ = false;
     return true;
   }
   is_done_ = true;
-  if (aht_iterator_ == aht_.End() && is_empty && plan_->group_bys_.empty()) {
+  if (aht_iterator_ == aht_.End() && is_empty_ && plan_->group_bys_.empty()) {
     //如果没有order by, 返回初始值，
     std::vector<Value> results;
     // agg
