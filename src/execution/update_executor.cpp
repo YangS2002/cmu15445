@@ -118,10 +118,25 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     auto new_meta = meta;
     new_meta.ts_ = txn->GetTransactionTempTs();
     new_meta.is_deleted_ = false;
-    // 2.2 原地修改，不需要更新index ，当旧元组和新元组相等时，不会更新undolog
+    // 2.2 原地修改，
     UpdateTupleAndUndoLink(txn_manager, cur_rid, new_undo_link, table_info_->table_.get(), txn, new_meta, new_tuple,
                            nullptr);
-
+    // 更新索引
+    for (auto &index : indices) {
+      auto index_schema = index->index_->GetKeySchema();
+      auto index_key_attrs = index->index_->GetKeyAttrs();
+      Tuple old_tuple_index =
+          cur_tuple.KeyFromTuple(table_info_->schema_, *index_schema, index_key_attrs);
+      Tuple new_tuple_index =
+          new_tuple.KeyFromTuple(table_info_->schema_, *index_schema, index_key_attrs);
+      // 先删除旧索引，再插入新索引
+      index->index_->DeleteEntry(old_tuple_index, cur_rid, txn);
+      auto ok = index->index_->InsertEntry(new_tuple_index, cur_rid, txn);
+      if(!ok){
+        txn->SetTainted();
+        throw ExecutionException("Failed to insert entry into index");
+      }
+    }
     // 2.3 插入写集
     txn->AppendWriteSet(plan_->GetTableOid(), cur_rid);
   }
