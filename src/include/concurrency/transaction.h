@@ -56,9 +56,9 @@ using index_oid_t = uint32_t;
 /** Represents a link to a previous version of this tuple */
 struct UndoLink {
   /* Previous version can be found in which txn */
-  txn_id_t prev_txn_{INVALID_TXN_ID};
+  txn_id_t prev_txn_{INVALID_TXN_ID};  // 上一次修改的事务id，无效表示当前为第一次修改
   /* The log index of the previous version in `prev_txn_` */
-  int prev_log_idx_{0};
+  int prev_log_idx_{0};  // 记录上一次修改的事务中，操作目标元组的槽号
 
   friend auto operator==(const UndoLink &a, const UndoLink &b) {
     return a.prev_txn_ == b.prev_txn_ && a.prev_log_idx_ == b.prev_log_idx_;
