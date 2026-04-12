@@ -17,9 +17,13 @@
 #include <utility>
 
 #include "catalog/catalog.h"
+#include "catalog/schema.h"
+#include "concurrency/transaction.h"
+#include "concurrency/transaction_manager.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/insert_plan.h"
+#include "storage/index/index.h"
 #include "storage/table/table_heap.h"
 #include "storage/table/tuple.h"
 
@@ -54,6 +58,8 @@ class InsertExecutor : public AbstractExecutor {
    */
   auto Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool override;
 
+  auto PrimaryKeyConflictCheck(const Tuple &tuple) -> bool;
+
   /** @return The output schema for the insert */
   auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); };
 
@@ -62,6 +68,10 @@ class InsertExecutor : public AbstractExecutor {
   const InsertPlanNode *plan_;
   std::shared_ptr<TableInfo> table_info_{nullptr};
   std::optional<std::unique_ptr<AbstractExecutor>> child_executor_;
+  Transaction *txn_{nullptr};
+  TransactionManager *txn_manager_{nullptr};
+  std::shared_ptr<IndexInfo> primary_index_info_{nullptr};
+  std::vector<uint32_t> index_key_attrs_;
   bool is_done_{false};
 };
 

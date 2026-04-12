@@ -336,6 +336,7 @@ set(P3_FILES
         "src/include/execution/executors/seq_scan_executor.h"
         "src/include/execution/executors/external_merge_sort_executor.h"
         "src/include/execution/executors/update_executor.h"
+        "src/include/execution/executors/topn_executor.h"
         "src/execution/aggregation_executor.cpp"
         "src/execution/delete_executor.cpp"
         "src/execution/filter_executor.cpp"
@@ -343,6 +344,7 @@ set(P3_FILES
         "src/execution/index_scan_executor.cpp"
         "src/execution/insert_executor.cpp"
         "src/execution/limit_executor.cpp"
+        "src/execution/topn_executor.cpp"
         "src/execution/nested_index_join_executor.cpp"
         "src/execution/nested_loop_join_executor.cpp"
         "src/execution/seq_scan_executor.cpp"
@@ -356,6 +358,7 @@ set(P3_FILES
         "src/optimizer/optimizer_custom_rules.cpp"
         "src/optimizer/optimizer_internal.cpp"
         "src/optimizer/seqscan_as_indexscan.cpp"
+        "src/optimizer/sort_limit_as_topn.cpp"
         "src/optimizer/column_pruning.cpp"
         "src/common/bustub_ddl.cpp"
         ${P2_FILES}

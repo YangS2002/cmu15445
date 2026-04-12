@@ -30,9 +30,9 @@ class Watermark {
     return watermark_;
   }
 
-  timestamp_t commit_ts_;
+  timestamp_t commit_ts_;  // 最后提交的时间戳
 
-  timestamp_t watermark_;
+  timestamp_t watermark_;  // 当前活跃事务中最小的read__ts，如果没有活跃事务，watermark = last_commit_ts
 
   std::unordered_map<timestamp_t, int> current_reads_;
 };

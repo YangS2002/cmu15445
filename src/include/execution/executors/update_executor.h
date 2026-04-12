@@ -16,12 +16,12 @@
 #include <utility>
 #include <vector>
 
+#include "execution/execution_common.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/update_plan.h"
 #include "storage/table/tuple.h"
 #include "type/value_factory.h"
-
 namespace bustub {
 
 /**
@@ -43,7 +43,8 @@ class UpdateExecutor : public AbstractExecutor {
 
   /** Initialize the update */
   void Init() override;
-
+  auto CheckWriteWriteConflict(const std::vector<Tuple> &saved_tuples, const std::vector<RID> &saved_rids,
+                               Transaction *txn, TransactionManager *txn_manager) -> void;
   /**
    * Yield the next tuple from the update.
    * @param[out] tuple The next tuple produced by the update
