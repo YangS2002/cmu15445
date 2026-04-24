@@ -13,9 +13,12 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
+#include "concurrency/transaction.h"
+#include "concurrency/transaction_manager.h"
 #include "execution/execution_common.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
@@ -23,7 +26,18 @@
 #include "storage/table/tuple.h"
 #include "type/value_factory.h"
 namespace bustub {
+struct PkChangeItem {
+  RID old_rid;
+  Tuple old_tuple;
+  TupleMeta old_meta;
+  Tuple old_key;
 
+  Tuple new_tuple;
+  Tuple new_key;
+
+  bool reuse_existing_rid{false};
+  RID target_rid{};
+};
 /**
  * UpdateExecutor executes an update on a table.
  * Updated values are always pulled from a child.
@@ -45,6 +59,23 @@ class UpdateExecutor : public AbstractExecutor {
   void Init() override;
   auto CheckWriteWriteConflict(const std::vector<Tuple> &saved_tuples, const std::vector<RID> &saved_rids,
                                Transaction *txn, TransactionManager *txn_manager) -> void;
+
+  auto UpdatewithoutPrimary(Transaction *txn, TransactionManager *txn_manager, const Tuple &cur_tuple,
+                            const RID &cur_rid, const Tuple &new_tuple, const TupleMeta &meta) -> bool;
+  auto GenerateUndolink(Transaction *txn, TransactionManager *txn_manager, const RID &rid, const TupleMeta &meta,
+                        const Tuple *old_tuple, const Tuple *new_tuple) -> std::optional<UndoLink>;
+  auto DeleteEntry(Transaction *txn, TransactionManager *txn_manager, const Tuple &cur_tuple, const RID &cur_rid,
+                   const TupleMeta &meta) -> bool;
+
+  auto InsertNewTuple(Transaction *txn, TransactionManager *txn_manager, const Tuple &cur_tuple, const RID &cur_rid,
+                      const Tuple &new_tuple, const TupleMeta &meta) -> RID;
+  auto KeyAsInt(const Tuple &key) const -> int32_t;
+  auto MakeKey(const Tuple &tuple) const -> Tuple;
+  auto LookupPrimaryKeyRid(const Tuple &key, Transaction *txn) -> std::optional<RID>;
+  auto ResolvePrimaryKeyTargets(Transaction *txn, const std::vector<PkChangeItem> &changes,
+                                std::vector<PkChangeItem> *resolved) -> void;
+  auto ReviveDeletedTuple(Transaction *txn, TransactionManager *txn_manager, const RID &target_rid,
+                          const Tuple &new_tuple) -> void;
   /**
    * Yield the next tuple from the update.
    * @param[out] tuple The next tuple produced by the update
@@ -67,6 +98,9 @@ class UpdateExecutor : public AbstractExecutor {
 
   /** The child executor to obtain value from */
   std::unique_ptr<AbstractExecutor> child_executor_;
+  std::shared_ptr<IndexInfo> primary_index_info_{nullptr};
+  std::vector<uint32_t> index_key_attrs_;
+  LockManager *lock_manager_{nullptr};
   bool is_done_{false};
 };
 }  // namespace bustub

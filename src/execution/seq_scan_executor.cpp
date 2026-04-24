@@ -27,6 +27,7 @@ SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNod
 
 void SeqScanExecutor::Init() {
   table_heap_ = exec_ctx_->GetCatalog()->GetTable(plan_->GetTableOid())->table_.get();
+  table_info_ = exec_ctx_->GetCatalog()->GetTable(plan_->GetTableOid());
   table_iterator_.emplace(table_heap_->MakeIterator());
   txn_ = exec_ctx_->GetTransaction();
   txn_manager_ = exec_ctx_->GetTransactionManager();
@@ -49,7 +50,7 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     }
     if (!undo_logs->empty()) {
       // 恢复旧版本的tuple
-      auto old_tuple_opt = ReconstructTuple(&GetOutputSchema(), cur_tuple, meta, undo_logs.value());
+      auto old_tuple_opt = ReconstructTuple(&table_info_->schema_, cur_tuple, meta, undo_logs.value());
       if (old_tuple_opt.has_value()) {
         cur_tuple = old_tuple_opt.value();
       } else {

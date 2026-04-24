@@ -84,16 +84,9 @@ auto GenerateSortKey(const Tuple &tuple, const std::vector<OrderBy> &order_bys, 
  */
 auto ReconstructTuple(const Schema *schema, const Tuple &base_tuple, const TupleMeta &base_meta,
                       const std::vector<UndoLog> &undo_logs) -> std::optional<Tuple> {
-  auto res_tuple = base_tuple;
+  auto rec_tuple = base_tuple;
   auto is_deleted = base_meta.is_deleted_;
   for (const auto &log : undo_logs) {
-    is_deleted = log.is_deleted_;
-    if (is_deleted) {
-      continue;
-    }
-    // 恢复操作
-    std::vector<Value> values;
-    int modified_idx = 0;
     std::vector<Column> partial_columns;
     for (size_t i = 0; i < schema->GetColumnCount(); i++) {
       if (log.modified_fields_[i]) {
@@ -101,19 +94,25 @@ auto ReconstructTuple(const Schema *schema, const Tuple &base_tuple, const Tuple
       }
     }
     Schema partial_schema(partial_columns);
+
+    std::vector<Value> values;
+    int modified_idx = 0;
     for (size_t i = 0; i < schema->GetColumnCount(); i++) {
-      auto value = res_tuple.GetValue(schema, i);
-      if (log.modified_fields_[i]) {  // 当前字段产生了修改
+      auto value = rec_tuple.GetValue(schema, i);
+      if (log.modified_fields_[i]) {
         value = log.tuple_.GetValue(&partial_schema, modified_idx++);
       }
       values.push_back(value);
     }
-    res_tuple = Tuple(values, schema);
+
+    rec_tuple = Tuple(values, schema);
+    is_deleted = log.is_deleted_;
   }
+
   if (is_deleted) {
     return std::nullopt;
   }
-  return res_tuple;
+  return rec_tuple;
 }
 
 /**

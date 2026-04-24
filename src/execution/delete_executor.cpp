@@ -86,24 +86,17 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     } else if (undo_link_opt.has_value() && undo_link_opt->prev_txn_ == txn->GetTransactionId()) {
       // 当前事务之前已经修改过这个 RID，更新已有 undo log，链头不变
       auto undo_log = txn_manager->GetUndoLog(*undo_link_opt);
-      auto new_undo_log = GenerateUpdatedUndoLog(&schema, &cur_tuple, nullptr, undo_log);
+      auto new_undo_log = GenerateUpdatedUndoLog(&schema, &base_tuple, nullptr, undo_log);
+      new_undo_log.is_deleted_ = undo_log.is_deleted_;
+      new_undo_log.prev_version_ = undo_log.prev_version_;
       txn->ModifyUndoLog(undo_link_opt->prev_log_idx_, new_undo_log);
-      new_undo_link = undo_link_opt;  // 保持原链头
+      new_undo_link = undo_link_opt;  // 链头不变
     } else {
       // 当前事务第一次修改这个旧 RID，生成新的 undo log，并成为新链头
       auto prev_link = undo_link_opt.has_value() ? *undo_link_opt : UndoLink{};
-      auto new_undo_log = GenerateNewUndoLog(&schema, &cur_tuple, nullptr, meta.ts_, prev_link);
-
-      auto appended = txn->AppendUndoLog(new_undo_log);
-      new_undo_link = appended;  // 如果 AppendUndoLog 返回的是 UndoLink
-    }
-
-    // 3.2 删除索引
-    for (auto &index : indeies) {
-      auto index_schema = index->index_->GetKeySchema();
-      auto index_key_attrs = index->index_->GetKeyAttrs();
-      Tuple child_tuple_index = cur_tuple.KeyFromTuple(schema, *index_schema, index_key_attrs);
-      index->index_->DeleteEntry(child_tuple_index, cur_rid, exec_ctx_->GetTransaction());
+      auto new_undo_log = GenerateNewUndoLog(&schema, &base_tuple, nullptr, meta.ts_, prev_link);
+      new_undo_log.is_deleted_ = meta.is_deleted_;
+      new_undo_link = txn->AppendUndoLog(new_undo_log);
     }
 
     // 3.3 加 write set
@@ -111,14 +104,28 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
 
     // 3.4 用 helper 一次性更新 meta + undo link
     TupleMeta new_meta = meta;
+    auto old_meta = meta;
     new_meta.is_deleted_ = true;
     new_meta.ts_ = txn->GetTransactionTempTs();
-
+    auto check_func = [&old_meta](const TupleMeta &cur_meta, const Tuple &tuple, RID rid, std::optional<UndoLink>) {
+      return old_meta == cur_meta;
+    };
     bool ok = UpdateTupleAndUndoLink(txn_manager, cur_rid, new_undo_link, table_info->table_.get(), txn, new_meta,
                                      base_tuple,  // delete 通常不改 tuple 内容，只改 meta
-                                     nullptr      // 当前任务单线程，直接传 nullptr
+                                     check_func   // 当前任务单线程，直接传 nullptr
     );
 
+    // 3.2 删除索引
+    for (auto &index : indeies) {
+      if (index->is_primary_key_) {
+        // 不删除主键索引
+        continue;
+      }
+      auto index_schema = index->index_->GetKeySchema();
+      auto index_key_attrs = index->index_->GetKeyAttrs();
+      Tuple child_tuple_index = cur_tuple.KeyFromTuple(schema, *index_schema, index_key_attrs);
+      index->index_->DeleteEntry(child_tuple_index, cur_rid, exec_ctx_->GetTransaction());
+    }
     if (!ok) {
       txn->SetTainted();
       throw ExecutionException("failed to update tuple and undo link in delete");

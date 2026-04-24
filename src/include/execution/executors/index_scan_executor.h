@@ -19,6 +19,8 @@
 
 #include "catalog/catalog.h"
 #include "common/rid.h"
+#include "concurrency/transaction.h"
+#include "concurrency/transaction_manager.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/index_scan_plan.h"
@@ -44,6 +46,7 @@ class IndexScanExecutor : public AbstractExecutor {
   void Init() override;
 
   auto Next(Tuple *tuple, RID *rid) -> bool override;
+  auto GetaVisableVersion(Tuple &tuple, const RID &rid, TupleMeta &meta) -> bool;
 
  private:
   /** The index scan plan node to be executed. */
@@ -52,6 +55,8 @@ class IndexScanExecutor : public AbstractExecutor {
   std::shared_ptr<IndexInfo> target_index_{nullptr};
   std::shared_ptr<TableInfo> table_info_{nullptr};
   BPlusTreeIndexForTwoIntegerColumn *tree_{nullptr};
+  Transaction *txn_{nullptr};
+  TransactionManager *txn_manager_{nullptr};
   size_t constance_index_{0};
 };
 }  // namespace bustub
