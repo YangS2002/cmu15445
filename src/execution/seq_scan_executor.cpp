@@ -31,6 +31,9 @@ void SeqScanExecutor::Init() {
   table_iterator_.emplace(table_heap_->MakeIterator());
   txn_ = exec_ctx_->GetTransaction();
   txn_manager_ = exec_ctx_->GetTransactionManager();
+  if (txn_->GetIsolationLevel() == IsolationLevel::SERIALIZABLE) {
+    txn_->AppendScanPredicate(plan_->GetTableOid(), plan_->filter_predicate_);
+  }
 }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {

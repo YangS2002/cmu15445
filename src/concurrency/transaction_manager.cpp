@@ -49,7 +49,72 @@ auto TransactionManager::Begin(IsolationLevel isolation_level) -> Transaction * 
   return txn_ref;
 }
 
-auto TransactionManager::VerifyTxn(Transaction *txn) -> bool { return true; }
+auto TransactionManager::VerifyTxn(Transaction *txn) -> bool {
+  if (txn->GetWriteSets().empty()) {
+    return true;
+  }
+
+  std::unordered_map<table_oid_t, std::unordered_set<RID>> conflict_rids;
+  for (const auto &[txn_id, other_txn] : txn_map_) {
+    if (txn_id == txn->GetTransactionId() || other_txn->state_ != TransactionState::COMMITTED ||
+        other_txn->commit_ts_ <= txn->read_ts_) {
+      continue;
+    }
+    for (const auto &[table_oid, write_set] : other_txn->GetWriteSets()) {
+      conflict_rids[table_oid].insert(write_set.begin(), write_set.end());
+    }
+  }
+
+  for (const auto &[table_oid, predicates] : txn->GetScanPredicates()) {
+    const auto rid_iter = conflict_rids.find(table_oid);
+    if (rid_iter == conflict_rids.end()) {
+      continue;
+    }
+
+    const auto table_info = catalog_->GetTable(table_oid);
+    const auto &schema = table_info->schema_;
+    const auto matches_any_predicate = [&](const Tuple &tuple) {
+      for (const auto &predicate : predicates) {
+        if (predicate == nullptr) {
+          return true;
+        }
+        const auto result = predicate->Evaluate(&tuple, schema);
+        if (!result.IsNull() && result.GetAs<bool>()) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    for (const auto &rid : rid_iter->second) {
+      const auto [base_meta, base_tuple] = table_info->table_->GetTuple(rid);
+      if (!base_meta.is_deleted_ && base_meta.ts_ < TXN_START_ID && matches_any_predicate(base_tuple)) {
+        return false;
+      }
+
+      std::vector<UndoLog> undo_logs;
+      auto undo_link = GetUndoLink(rid);
+      while (undo_link.has_value() && undo_link->IsValid()) {
+        const auto owner_iter = txn_map_.find(undo_link->prev_txn_);
+        if (owner_iter == txn_map_.end()) {
+          return false;
+        }
+        const auto undo_log = owner_iter->second->GetUndoLog(undo_link->prev_log_idx_);
+        undo_logs.push_back(undo_log);
+
+        const auto old_tuple = ReconstructTuple(&schema, base_tuple, base_meta, undo_logs);
+        if (old_tuple.has_value() && matches_any_predicate(*old_tuple)) {
+          return false;
+        }
+        if (undo_log.ts_ != INVALID_TS && undo_log.ts_ <= txn->read_ts_) {
+          break;
+        }
+        undo_link = undo_log.prev_version_;
+      }
+    }
+  }
+  return true;
+}
 
 auto TransactionManager::Commit(Transaction *txn) -> bool {
   std::unique_lock<std::mutex> commit_lck(commit_mutex_);
@@ -64,6 +129,7 @@ auto TransactionManager::Commit(Transaction *txn) -> bool {
 
   if (txn->GetIsolationLevel() == IsolationLevel::SERIALIZABLE) {
     if (!VerifyTxn(txn)) {
+      lck.unlock();
       commit_lck.unlock();
       Abort(txn);
       return false;
@@ -183,6 +249,11 @@ void TransactionManager::GarbageCollection() {
   std::unordered_set<txn_id_t> keep_txn;
   for (auto &[txn_id, txn_ptr] : txn_map_) {
     if (txn_ptr->state_ == TransactionState::RUNNING || txn_ptr->state_ == TransactionState::TAINTED) {
+      keep_txn.insert(txn_id);
+    }
+  }
+  for (auto &[txn_id, txn_ptr] : txn_map_) {
+    if (txn_ptr->state_ == TransactionState::COMMITTED && txn_ptr->commit_ts_ > watermark) {
       keep_txn.insert(txn_id);
     }
   }

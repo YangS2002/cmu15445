@@ -43,6 +43,9 @@ void IndexScanExecutor::Init() {
   constance_index_ = 0;
   txn_ = exec_ctx_->GetTransaction();
   txn_manager_ = exec_ctx_->GetTransactionManager();
+  if (txn_->GetIsolationLevel() == IsolationLevel::SERIALIZABLE) {
+    txn_->AppendScanPredicate(plan_->table_oid_, plan_->filter_predicate_);
+  }
 }
 
 auto IndexScanExecutor::GetaVisableVersion(Tuple &tuple, const RID &rid, TupleMeta &meta) -> bool {

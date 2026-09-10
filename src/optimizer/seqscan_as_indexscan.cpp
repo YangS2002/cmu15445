@@ -150,8 +150,8 @@ auto Optimizer::OptimizeSeqScanAsIndexScan(const bustub::AbstractPlanNodeRef &pl
         std::vector<AbstractExpressionRef> pred_keys;
         pred_keys.push_back(child_constant_expr);
         // indexscan直接从 pred_keys中获取查询条件，进行点查询，此时pred_keys就是谓词表达式
-        return std::make_shared<IndexScanPlanNode>(optimized_plan->output_schema_, table_info->oid_, index_oid, nullptr,
-                                                   pred_keys);
+        return std::make_shared<IndexScanPlanNode>(optimized_plan->output_schema_, table_info->oid_, index_oid,
+                                                   filter_predicate, pred_keys);
       }
     }
     if (dynamic_cast<const LogicExpression *>(filter_predicate.get()) != nullptr) {
@@ -166,7 +166,7 @@ auto Optimizer::OptimizeSeqScanAsIndexScan(const bustub::AbstractPlanNodeRef &pl
           auto [index_oid, child_constant_expr] =
               IsTargetExpression(logic_expr->GetChildAt(1), indices, table_info->schema_);
           return std::make_shared<IndexScanPlanNode>(optimized_plan->output_schema_, table_info->oid_, index_oid,
-                                                     nullptr, result);
+                                                     filter_predicate, result);
         }
       }
     }
