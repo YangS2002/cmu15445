@@ -182,5 +182,19 @@ class BufferPoolManager {
    * stored inside of it. Additionally, you may also want to implement a helper function that returns either a shared
    * pointer to a `FrameHeader` that already has a page's data stored inside of it, or an index to said `FrameHeader`.
    */
+ private:
+  /**
+   * 对顺序扫描做线性预取。
+   * 当前读取 page_id 时，尝试预取 page_id + 1。
+   */
+  std::mutex prefetch_latch_;
+  std::unordered_set<page_id_t> prefetched_pages_;
+  void MaybePrefetchNextPage(page_id_t page_id, AccessType access_type);
+
+  /**
+   * 尝试把 page_id 预取进 buffer pool。
+   * 预取失败不影响正确性。
+   */
+  void PrefetchPage(page_id_t page_id);
 };
 }  // namespace bustub

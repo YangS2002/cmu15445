@@ -79,7 +79,6 @@ auto UpdateExecutor::MakeKey(const Tuple &tuple) const -> Tuple {
   return tuple.KeyFromTuple(table_info_->schema_, primary_index_info_->key_schema_, index_key_attrs_);
 }
 
-// 用你项目里真正的 index probe 接口替换 ScanKey
 auto UpdateExecutor::LookupPrimaryKeyRid(const Tuple &key, Transaction *txn) -> std::optional<RID> {
   std::vector<RID> result;
   primary_index_info_->index_->ScanKey(key, &result, txn);  // 按你的 index API 改
@@ -154,7 +153,7 @@ auto UpdateExecutor::ResolvePrimaryKeyTargets(Transaction *txn, const std::vecto
     // 情况 2：去主键索引里 probe
     auto rid_opt = LookupPrimaryKeyRid(item.new_key, txn);
     if (!rid_opt.has_value()) {
-      // 完全新 key，后面 fresh insert
+      // 完全新 key，后面 insert
       item.reuse_existing_rid = false;
       resolved->push_back(item);
       continue;
@@ -163,7 +162,7 @@ auto UpdateExecutor::ResolvePrimaryKeyTargets(Transaction *txn, const std::vecto
     auto target_rid = *rid_opt;
     auto target_meta = table_info_->table_->GetTupleMeta(target_rid);
 
-    // 官方要求：如果 index 指向 deleted tuple，则复用该 RID，不创建新 RID。:contentReference[oaicite:3]{index=3}
+    // 官方要求：如果 index 指向 deleted tuple，则复用该 RID，不创建新 RID。
     if (target_meta.is_deleted_) {
       // 这里也要做写写冲突判断
       if (target_meta.ts_ >= TXN_START_ID && target_meta.ts_ != txn->GetTransactionId()) {

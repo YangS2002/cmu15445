@@ -38,6 +38,7 @@ class LRUKNode {
   size_t k_;
   frame_id_t fid_;
   bool is_evictable_{false};
+  AccessType access_type_{AccessType::Unknown};
 
  public:
   LRUKNode(frame_id_t fid, size_t k) {
@@ -60,6 +61,13 @@ class LRUKNode {
   auto GetHitorySize() -> size_t { return history_.size(); }
   auto IsEvictable() -> bool { return is_evictable_; }
   void SetEvictable(bool evictable) { is_evictable_ = evictable; }
+
+ public:
+  void SetAccessType(AccessType access_type) { access_type_ = access_type; }
+
+  auto GetAccessType() const -> AccessType { return access_type_; }
+
+  void ClearHistory() { history_.clear(); }
 };
 
 /**

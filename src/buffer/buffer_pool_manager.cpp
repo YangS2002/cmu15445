@@ -94,9 +94,9 @@ void BufferPoolManager::WRData(bool is_write, page_id_t page_id, frame_id_t fram
   future.get();
 }
 
-/*****************************************************************************
+/**********************************************
  * Page allocation / deletion
- *****************************************************************************/
+ *********************************************/
 
 auto BufferPoolManager::NewPage() -> page_id_t {
   auto new_page_id = next_page_id_.fetch_add(1);
@@ -203,7 +203,7 @@ auto BufferPoolManager::CheckedReadPage(page_id_t page_id, AccessType access_typ
       }
     }
 
-    // 先声明：我来 load 这个 page，别人别重复 load
+    // 防止重复 load
     page_io_[page_id] = PageIOState::LOADING;
 
     lock.unlock();
@@ -334,12 +334,136 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
  * Convenience wrappers
  *****************************************************************************/
 
+void BufferPoolManager::PrefetchPage(page_id_t page_id) {
+  if (page_id == INVALID_PAGE_ID) {
+    return;
+  }
+
+  frame_id_t frame_id = INVALID_FRAME_ID;
+  std::shared_ptr<FrameHeader> frame = nullptr;
+
+  {
+    std::lock_guard<std::mutex> lock(*bpm_latch_);
+
+    // 1. 已经在 buffer pool 中，不需要预取
+    if (page_table_.find(page_id) != page_table_.end()) {
+      return;
+    }
+
+    // 2. 如果这个 page 正在被前台线程加载，也不要重复预取
+    if (page_io_.find(page_id) != page_io_.end()) {
+      return;
+    }
+
+    // 3. 优先使用 free frame
+    if (!free_frames_.empty()) {
+      frame_id = free_frames_.front();
+      free_frames_.pop_front();
+      frame = frames_[frame_id];
+    } else {
+      // 4. 没有 free frame，尝试找 victim
+      return;
+    }
+
+    // 7. 占住 frame，但此时不要把 page_id 插入 page_table_
+    // 否则前台线程会命中一个还没读完的 page。
+    frame->Reset();
+    frame->pin_count_.store(1);
+    frame->is_dirty_ = false;
+
+    // 这里先标记为 INVALID，表示这个 frame 正在被预取使用，但还不是有效页。
+    pages_[frame_id] = INVALID_PAGE_ID;
+
+    replacer_->RecordAccess(frame_id, AccessType::Scan);
+    replacer_->SetEvictable(frame_id, false);
+
+    // 8. 标记 page 正在 loading，避免前台重复加载同一页。
+    page_io_[page_id] = PageIOState::LOADING;
+  }
+
+  // 9. 锁外做磁盘 I/O
+  auto promise = disk_scheduler_->CreatePromise();
+  auto future = promise.get_future();
+
+  disk_scheduler_->Schedule({
+      false,
+      frame->GetDataMut(),
+      page_id,
+      std::move(promise),
+  });
+
+  future.get();
+
+  {
+    std::lock_guard<std::mutex> lock(*bpm_latch_);
+
+    // 10. 读盘期间，前台线程可能已经把这个 page 加载进来了。
+    // 如果已经存在，就放弃本次预取结果，把 frame 还回 free list。
+    if (page_table_.find(page_id) != page_table_.end()) {
+      pages_[frame_id] = INVALID_PAGE_ID;
+      frame->Reset();
+      frame->pin_count_.store(0);
+      frame->is_dirty_ = false;
+
+      free_frames_.push_back(frame_id);
+
+      page_io_.erase(page_id);
+      cv_.notify_all();
+      return;
+    }
+
+    // 11. 正式发布这个预取页。
+    pages_[frame_id] = page_id;
+    page_table_[page_id] = frame_id;
+
+    frame->pin_count_.store(0);
+    frame->is_dirty_ = false;
+
+    replacer_->SetEvictable(frame_id, true);
+
+    page_io_.erase(page_id);
+    cv_.notify_all();
+  }
+}
+
+void BufferPoolManager::MaybePrefetchNextPage(page_id_t page_id, AccessType access_type) {
+  if (access_type != AccessType::Scan) {
+    return;
+  }
+
+  page_id_t next_page_id = page_id + 1;
+
+  if (next_page_id == INVALID_PAGE_ID) {
+    return;
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(prefetch_latch_);
+
+    if (prefetched_pages_.find(next_page_id) != prefetched_pages_.end()) {
+      return;
+    }
+
+    prefetched_pages_.insert(next_page_id);
+  }
+
+  PrefetchPage(next_page_id);
+
+  {
+    std::lock_guard<std::mutex> lock(prefetch_latch_);
+    prefetched_pages_.erase(next_page_id);
+  }
+}
+
 auto BufferPoolManager::WritePage(page_id_t page_id, AccessType access_type) -> WritePageGuard {
   auto guard_opt = CheckedWritePage(page_id, access_type);
   if (!guard_opt.has_value()) {
     fmt::println(stderr, "\n`CheckedWritePage` failed to bring in page {}\n", page_id);
     std::abort();
   }
+  // if (access_type == AccessType::Scan) {
+  //   MaybePrefetchNextPage(page_id, access_type);
+  // }
   return std::move(guard_opt).value();
 }
 
@@ -349,6 +473,10 @@ auto BufferPoolManager::ReadPage(page_id_t page_id, AccessType access_type) -> R
     fmt::println(stderr, "\n`CheckedReadPage` failed to bring in page {}\n", page_id);
     std::abort();
   }
+  if (access_type == AccessType::Scan) {
+    MaybePrefetchNextPage(page_id, access_type);
+  }
+
   return std::move(guard_opt).value();
 }
 
