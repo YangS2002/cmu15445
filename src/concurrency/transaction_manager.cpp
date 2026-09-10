@@ -73,8 +73,9 @@ auto TransactionManager::VerifyTxn(Transaction *txn) -> bool {
 
     const auto table_info = catalog_->GetTable(table_oid);
     const auto &schema = table_info->schema_;
-    const auto matches_any_predicate = [&](const Tuple &tuple) {
-      for (const auto &predicate : predicates) {
+    const auto *scan_predicates = &predicates;
+    const auto matches_any_predicate = [scan_predicates, &schema](const Tuple &tuple) {
+      for (const auto &predicate : *scan_predicates) {
         if (predicate == nullptr) {
           return true;
         }
