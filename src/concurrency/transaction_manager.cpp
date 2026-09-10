@@ -248,13 +248,19 @@ void TransactionManager::GarbageCollection() {
   auto table_names = catalog_->GetTableNames();
   auto watermark = GetWatermark();
   std::unordered_set<txn_id_t> keep_txn;
+  std::optional<timestamp_t> serializable_watermark;
   for (auto &[txn_id, txn_ptr] : txn_map_) {
     if (txn_ptr->state_ == TransactionState::RUNNING || txn_ptr->state_ == TransactionState::TAINTED) {
       keep_txn.insert(txn_id);
+      if (txn_ptr->GetIsolationLevel() == IsolationLevel::SERIALIZABLE &&
+          (!serializable_watermark.has_value() || txn_ptr->read_ts_ < *serializable_watermark)) {
+        serializable_watermark = txn_ptr->read_ts_;
+      }
     }
   }
   for (auto &[txn_id, txn_ptr] : txn_map_) {
-    if (txn_ptr->state_ == TransactionState::COMMITTED && txn_ptr->commit_ts_ > watermark) {
+    if (serializable_watermark.has_value() && txn_ptr->state_ == TransactionState::COMMITTED &&
+        txn_ptr->commit_ts_ > *serializable_watermark) {
       keep_txn.insert(txn_id);
     }
   }
