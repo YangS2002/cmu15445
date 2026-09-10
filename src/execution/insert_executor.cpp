@@ -177,10 +177,9 @@ auto InsertExecutor::PrimaryKeyConflictCheck(TupleMeta &meta, const Tuple &tuple
       if (meta.is_deleted_) {
         // 已经被删除了，准备尝试覆盖这个位置
         return PrimaryCheckResult::ReviveDeletedTuple;
-      } else {
-        // 没有被删除，违反了主键约束
-        return PrimaryCheckResult::ConflictWithAliveTuple;
       }
+      // 没有被删除，违反了主键约束
+      return PrimaryCheckResult::ConflictWithAliveTuple;
     }
   }
   return PrimaryCheckResult::NoConflict;

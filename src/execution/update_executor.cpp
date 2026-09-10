@@ -41,7 +41,6 @@ auto UpdateExecutor::CheckWriteWriteConflict(const std::vector<Tuple> &saved_tup
                                              Transaction *txn, TransactionManager *txn_manager) -> void {
   auto table_info = GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid());
   for (size_t i = 0; i < saved_tuples.size(); i++) {
-    auto cur_tuple = saved_tuples[i];
     auto cur_rid = saved_rids[i];
     // 2.1 被删除的元组是其他未提交事务正在修改的
     auto meta = table_info->table_->GetTupleMeta(cur_rid);
@@ -126,9 +125,9 @@ auto UpdateExecutor::ResolvePrimaryKeyTargets(Transaction *txn, const std::vecto
   std::unordered_set<int64_t> new_keys;
 
   for (const auto &item : changes) {
-    old_key_to_rid.emplace(KeyAsInt(item.old_key), item.old_rid);
+    old_key_to_rid.emplace(KeyAsInt(item.old_key_), item.old_rid_);
 
-    int64_t new_pk = KeyAsInt(item.new_key);
+    int64_t new_pk = KeyAsInt(item.new_key_);
     if (!new_keys.insert(new_pk).second) {
       txn->SetTainted();
       throw ExecutionException("Duplicate primary key value violates primary key constraint");
@@ -139,22 +138,22 @@ auto UpdateExecutor::ResolvePrimaryKeyTargets(Transaction *txn, const std::vecto
   resolved->reserve(changes.size());
 
   for (auto item : changes) {
-    int64_t new_pk = KeyAsInt(item.new_key);
+    int64_t new_pk = KeyAsInt(item.new_key_);
 
     // 情况 1：新 key 正好是本批某个旧 key。复用那个旧 key 对应 RID。
     auto it = old_key_to_rid.find(new_pk);
     if (it != old_key_to_rid.end()) {
-      item.reuse_existing_rid = true;
-      item.target_rid = it->second;
+      item.reuse_existing_rid_ = true;
+      item.target_rid_ = it->second;
       resolved->push_back(item);
       continue;
     }
 
     // 情况 2：去主键索引里 probe
-    auto rid_opt = LookupPrimaryKeyRid(item.new_key, txn);
+    auto rid_opt = LookupPrimaryKeyRid(item.new_key_, txn);
     if (!rid_opt.has_value()) {
       // 完全新 key，后面 insert
-      item.reuse_existing_rid = false;
+      item.reuse_existing_rid_ = false;
       resolved->push_back(item);
       continue;
     }
@@ -174,8 +173,8 @@ auto UpdateExecutor::ResolvePrimaryKeyTargets(Transaction *txn, const std::vecto
         throw ExecutionException("write-write conflict on deleted tuple");
       }
 
-      item.reuse_existing_rid = true;
-      item.target_rid = target_rid;
+      item.reuse_existing_rid_ = true;
+      item.target_rid_ = target_rid;
       resolved->push_back(item);
       continue;
     }
@@ -371,12 +370,12 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     }
 
     pk_changes.push_back(PkChangeItem{
-        .old_rid = old_rid,
-        .old_tuple = head_tuple,  // 物理删除/undo 用当前头版本
-        .old_meta = head_meta,
-        .old_key = old_key,  // 主键语义用 visible 版本
-        .new_tuple = new_tuple,
-        .new_key = new_key,
+        .old_rid_ = old_rid,
+        .old_tuple_ = head_tuple,  // 物理删除/undo 用当前头版本
+        .old_meta_ = head_meta,
+        .old_key_ = old_key,  // 主键语义用 visible 版本
+        .new_tuple_ = new_tuple,
+        .new_key_ = new_key,
     });
   }
 
@@ -386,17 +385,17 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
 
   // 第三阶段：先把所有旧 RID 标 deleted，但不要删主键索引项
   for (const auto &item : resolved_changes) {
-    DeleteEntry(txn, txn_manager, item.old_tuple, item.old_rid, item.old_meta);
+    DeleteEntry(txn, txn_manager, item.old_tuple_, item.old_rid_, item.old_meta_);
   }
 
   // 第四阶段：写入新版本
   for (const auto &item : resolved_changes) {
-    if (item.reuse_existing_rid) {
+    if (item.reuse_existing_rid_) {
       // 复活 target_rid，不是 old_rid
-      ReviveDeletedTuple(txn, txn_manager, item.target_rid, item.new_tuple);
+      ReviveDeletedTuple(txn, txn_manager, item.target_rid_, item.new_tuple_);
     } else {
-      auto new_rid = InsertNewTuple(txn, txn_manager, item.old_tuple, item.old_rid, item.new_tuple, item.old_meta);
-      bool ok = primary_index_info_->index_->InsertEntry(item.new_key, new_rid, txn);
+      auto new_rid = InsertNewTuple(txn, txn_manager, item.old_tuple_, item.old_rid_, item.new_tuple_, item.old_meta_);
+      bool ok = primary_index_info_->index_->InsertEntry(item.new_key_, new_rid, txn);
       if (!ok) {
         txn->SetTainted();
         throw ExecutionException("Failed to insert entry into index");

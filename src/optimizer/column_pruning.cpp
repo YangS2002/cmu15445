@@ -91,12 +91,7 @@ auto RewriteExprByColMap(const Expr &expr, const std::unordered_map<uint32_t, ui
  * 判断 old -> new 映射是否是恒等映射
  *****************************************************************************/
 auto IsIdentityMap(const std::unordered_map<uint32_t, uint32_t> &mp) -> bool {
-  for (const auto &[old_idx, new_idx] : mp) {
-    if (old_idx != new_idx) {
-      return false;
-    }
-  }
-  return true;
+  return std::all_of(mp.begin(), mp.end(), [](const auto &entry) { return entry.first == entry.second; });
 }
 
 /*****************************************************************************
@@ -175,8 +170,8 @@ auto TryPruneProjectionProjectionAgg(const AbstractPlanNode &plan) -> AbstractPl
   std::vector<uint32_t> keep_agg_out_old_idxs(used_agg_outputs_set.begin(), used_agg_outputs_set.end());
   std::sort(keep_agg_out_old_idxs.begin(), keep_agg_out_old_idxs.end());
 
-  const uint32_t gb_cnt = static_cast<uint32_t>(agg.group_bys_.size());
-  const uint32_t agg_cnt = static_cast<uint32_t>(agg.aggregates_.size());
+  const auto gb_cnt = static_cast<uint32_t>(agg.group_bys_.size());
+  const auto agg_cnt = static_cast<uint32_t>(agg.aggregates_.size());
 
   // old agg output idx -> new agg output idx
   std::unordered_map<uint32_t, uint32_t> agg_out_old_to_new;
@@ -207,7 +202,7 @@ auto TryPruneProjectionProjectionAgg(const AbstractPlanNode &plan) -> AbstractPl
 
     auto it = agg_key_to_new_local_idx.find(key);
     if (it == agg_key_to_new_local_idx.end()) {
-      uint32_t new_local_agg_idx = static_cast<uint32_t>(new_agg_exprs.size());
+      auto new_local_agg_idx = static_cast<uint32_t>(new_agg_exprs.size());
       agg_key_to_new_local_idx.emplace(key, new_local_agg_idx);
 
       new_agg_exprs.push_back(agg.aggregates_[old_local_agg_idx]);

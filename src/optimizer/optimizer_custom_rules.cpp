@@ -2,6 +2,8 @@
 #include <optional>
 #include <utility>
 #include <vector>
+#include "optimizer/optimizer.h"
+
 #include "common/exception.h"
 #include "execution/expressions/abstract_expression.h"
 #include "execution/expressions/column_value_expression.h"

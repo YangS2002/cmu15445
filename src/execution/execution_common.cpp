@@ -194,7 +194,7 @@ auto GenerateNewUndoLog(const Schema *schema, const Tuple *base_tuple, const Tup
     modified_fields.resize(schema->GetColumnCount(), true);
     UndoLog log;
     log.modified_fields_ = std::move(modified_fields);
-    log.tuple_ = std::move(*base_tuple);
+    log.tuple_ = *base_tuple;
     log.ts_ = ts;
     log.prev_version_ = prev_version;
     log.is_deleted_ = false;
@@ -254,7 +254,7 @@ auto GenerateUpdatedUndoLog(const Schema *schema, const Tuple *base_tuple, const
   size_t partial_idx = 0;
   std::vector<Column> original_partial_columns;
   for (size_t i = 0; i < schema->GetColumnCount(); i++) {
-    if (log.modified_fields_[i] == true) {
+    if (log.modified_fields_[i]) {
       original_partial_columns.push_back(schema->GetColumn(i));
     }
   }
@@ -266,7 +266,7 @@ auto GenerateUpdatedUndoLog(const Schema *schema, const Tuple *base_tuple, const
     // 恢复原始值
     for (size_t i = 0; i < schema->GetColumnCount(); i++) {
       Value old_value;
-      if (log.modified_fields_[i] == true) {
+      if (log.modified_fields_[i]) {
         old_value = log.tuple_.GetValue(&original_partial_schema, partial_idx);
         partial_idx++;
       } else {
@@ -300,7 +300,7 @@ auto GenerateUpdatedUndoLog(const Schema *schema, const Tuple *base_tuple, const
     Value old_value = base_tuple->GetValue(schema, i);
     Value new_value = target_tuple->GetValue(schema, i);
     if (!old_value.CompareExactlyEquals(new_value)) {
-      if (log.modified_fields_[i] == true) {
+      if (log.modified_fields_[i]) {
         // 之前修改过，这次又修改了，继续表示修改，但恢复原始值 ， 注意，不要恢复为未修改，保持这个字段是被修改过的语义
         Value original_value = log.tuple_.GetValue(&original_partial_schema, partial_idx);
         modified_fields[i] = true;
@@ -314,13 +314,13 @@ auto GenerateUpdatedUndoLog(const Schema *schema, const Tuple *base_tuple, const
       }
     } else {
       // 和上一次修改后的值一样，且上次是修改了的，继续表示修改
-      if (log.modified_fields_[i] == true) {
+      if (log.modified_fields_[i]) {
         Value original_value = log.tuple_.GetValue(&original_partial_schema, partial_idx);
         values.push_back(original_value);
         partial_columns.push_back(schema->GetColumn(i));
       }
     }
-    if (log.modified_fields_[i] == true) {
+    if (log.modified_fields_[i]) {
       partial_idx++;
     }
   }

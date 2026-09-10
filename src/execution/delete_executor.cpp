@@ -48,8 +48,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
 
   // 2. write 2 write check
   std::vector<Tuple> saved_tuples;
-  for (size_t i = 0; i < saved_rids.size(); i++) {
-    auto cur_rid = saved_rids[i];
+  for (const auto &cur_rid : saved_rids) {
     // 2.1 被删除的元组是其他未提交事务正在修改的
     auto [meta, cur_tuple] = table_info->table_->GetTuple(cur_rid);
     saved_tuples.push_back(cur_tuple);

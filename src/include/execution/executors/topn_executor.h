@@ -62,7 +62,7 @@ class TopNExecutor : public AbstractExecutor {
   auto GetNumInHeap() -> size_t;
   class TopNHeapComparator {
    public:
-    explicit TopNHeapComparator(const TupleComparator &cmp) : cmp_(cmp) {}
+    explicit TopNHeapComparator(TupleComparator cmp) : cmp_(std::move(cmp)) {}
 
     auto operator()(const SortEntry &a, const SortEntry &b) const -> bool {
       // 让“更优”的元素下沉，让“更差”的元素在 top

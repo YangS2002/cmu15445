@@ -27,16 +27,16 @@
 #include "type/value_factory.h"
 namespace bustub {
 struct PkChangeItem {
-  RID old_rid;
-  Tuple old_tuple;
-  TupleMeta old_meta;
-  Tuple old_key;
+  RID old_rid_;
+  Tuple old_tuple_;
+  TupleMeta old_meta_;
+  Tuple old_key_;
 
-  Tuple new_tuple;
-  Tuple new_key;
+  Tuple new_tuple_;
+  Tuple new_key_;
 
-  bool reuse_existing_rid{false};
-  RID target_rid{};
+  bool reuse_existing_rid_{false};
+  RID target_rid_{};
 };
 /**
  * UpdateExecutor executes an update on a table.
@@ -67,8 +67,8 @@ class UpdateExecutor : public AbstractExecutor {
   auto DeleteEntry(Transaction *txn, TransactionManager *txn_manager, const Tuple &cur_tuple, const RID &cur_rid,
                    const TupleMeta &meta) -> bool;
 
-  auto InsertNewTuple(Transaction *txn, TransactionManager *txn_manager, const Tuple &cur_tuple, const RID &cur_rid,
-                      const Tuple &new_tuple, const TupleMeta &meta) -> RID;
+  auto InsertNewTuple(Transaction *txn, TransactionManager *txn_manager, const Tuple &old_tuple, const RID &old_cur,
+                      const Tuple &new_tuple, const TupleMeta &old_meta) -> RID;
   auto KeyAsInt(const Tuple &key) const -> int32_t;
   auto MakeKey(const Tuple &tuple) const -> Tuple;
   auto LookupPrimaryKeyRid(const Tuple &key, Transaction *txn) -> std::optional<RID>;
