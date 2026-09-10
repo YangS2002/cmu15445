@@ -185,16 +185,15 @@ void TransactionManager::Abort(Transaction *txn) {
         rollback_meta.is_deleted_ = true;
         rollback_meta.ts_ = txn->GetReadTs();
 
-        auto check_func = [cur_meta](const TupleMeta &old_meta, const Tuple &old_tuple, RID old_rid) {
+        auto check_func = [cur_meta](const TupleMeta &old_meta, const Tuple &, RID, std::optional<UndoLink>) {
           return old_meta == cur_meta;
         };
 
-        bool ok = table->UpdateTupleInPlace(rollback_meta, cur_tuple, rid, std::move(check_func));
+        bool ok = UpdateTupleAndUndoLink(this, rid, std::nullopt, table, txn, rollback_meta, cur_tuple,
+                                         std::move(check_func));
         if (!ok) {
           throw Exception("abort failed: rollback inserted tuple failed");
         }
-
-        UpdateUndoLink(rid, std::nullopt);
         continue;
       }
 
@@ -219,20 +218,18 @@ void TransactionManager::Abort(Transaction *txn) {
         rollback_tuple = restored_tuple_opt.value();
       }
 
-      auto check_func = [cur_meta](const TupleMeta &old_meta, const Tuple &old_tuple, RID old_rid) {
+      auto check_func = [cur_meta](const TupleMeta &old_meta, const Tuple &, RID, std::optional<UndoLink>) {
         return old_meta == cur_meta;
       };
 
-      bool ok = table->UpdateTupleInPlace(rollback_meta, rollback_tuple, rid, std::move(check_func));
+      std::optional<UndoLink> rollback_link = std::nullopt;
+      if (undo_log.prev_version_.IsValid()) {
+        rollback_link = undo_log.prev_version_;
+      }
+      bool ok = UpdateTupleAndUndoLink(this, rid, rollback_link, table, txn, rollback_meta, rollback_tuple,
+                                       std::move(check_func));
       if (!ok) {
         throw Exception("abort failed: rollback updated tuple failed");
-      }
-
-      // 恢复 undo link 到本事务修改之前的链头
-      if (undo_log.prev_version_.IsValid()) {
-        UpdateUndoLink(rid, undo_log.prev_version_);
-      } else {
-        UpdateUndoLink(rid, std::nullopt);
       }
     }
   }
