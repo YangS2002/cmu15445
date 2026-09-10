@@ -1,6 +1,7 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -132,9 +133,6 @@ auto Optimizer::OptimizeSeqScanAsIndexScan(const bustub::AbstractPlanNodeRef &pl
   // TODO(student): implement seq scan with predicate -> index scan optimizer rule
   // The Filter Predicate Pushdown has been enabled for you in optimizer.cpp when forcing starter rule
   std::vector<AbstractPlanNodeRef> children;
-  if (plan->GetType() == PlanType::Update) {
-    std::cout << "update" << std::endl;
-  }
   for (const auto &child : plan->GetChildren()) {
     children.emplace_back(OptimizeSeqScanAsIndexScan(child));
   }

@@ -94,11 +94,87 @@ void TransactionManager::Abort(Transaction *txn) {
     throw Exception("txn not in running / tainted state");
   }
 
-  // TODO(fall2023): Implement the abort logic!
+  auto txn_id = txn->GetTransactionId();
 
-  std::unique_lock<std::shared_mutex> lck(txn_map_mutex_);
-  txn->state_ = TransactionState::ABORTED;
-  running_txns_.RemoveTxn(txn->read_ts_);
+  // 回滚该事务写过的所有 RID
+  for (auto &[table_oid, write_set] : txn->GetWriteSets()) {
+    auto table_info = catalog_->GetTable(table_oid);
+    auto *table = table_info->table_.get();
+
+    for (const auto &rid : write_set) {
+      auto [meta, cur_tuple] = table->GetTuple(rid);
+      auto cur_meta = meta;
+      // 当前 head 不是本事务写的，跳过
+      if (cur_meta.ts_ != txn_id) {
+        continue;
+      }
+
+      auto undo_link_opt = GetUndoLink(rid);
+
+      // 情况 1：本事务新插入的 tuple，没有 undo log
+      // 回滚方式：标记为 deleted，并且 ts 不能继续是 txn_id
+      if (!undo_link_opt.has_value() || !undo_link_opt->IsValid()) {
+        TupleMeta rollback_meta = cur_meta;
+        rollback_meta.is_deleted_ = true;
+        rollback_meta.ts_ = txn->GetReadTs();
+
+        auto check_func = [cur_meta](const TupleMeta &old_meta, const Tuple &old_tuple, RID old_rid) {
+          return old_meta == cur_meta;
+        };
+
+        bool ok = table->UpdateTupleInPlace(rollback_meta, cur_tuple, rid, std::move(check_func));
+        if (!ok) {
+          throw Exception("abort failed: rollback inserted tuple failed");
+        }
+
+        UpdateUndoLink(rid, std::nullopt);
+        continue;
+      }
+
+      // 理论上当前 head 是本事务写的，则 undo link 链头也应属于本事务
+      if (undo_link_opt->prev_txn_ != txn_id) {
+        continue;
+      }
+
+      auto undo_log = GetUndoLog(*undo_link_opt);
+
+      std::vector<UndoLog> undo_logs;
+      undo_logs.emplace_back(undo_log);
+
+      auto restored_tuple_opt = ReconstructTuple(&table_info->schema_, cur_tuple, cur_meta, undo_logs);
+
+      TupleMeta rollback_meta;
+      rollback_meta.ts_ = undo_log.ts_;
+      rollback_meta.is_deleted_ = undo_log.is_deleted_;
+
+      Tuple rollback_tuple = cur_tuple;
+      if (restored_tuple_opt.has_value()) {
+        rollback_tuple = restored_tuple_opt.value();
+      }
+
+      auto check_func = [cur_meta](const TupleMeta &old_meta, const Tuple &old_tuple, RID old_rid) {
+        return old_meta == cur_meta;
+      };
+
+      bool ok = table->UpdateTupleInPlace(rollback_meta, rollback_tuple, rid, std::move(check_func));
+      if (!ok) {
+        throw Exception("abort failed: rollback updated tuple failed");
+      }
+
+      // 恢复 undo link 到本事务修改之前的链头
+      if (undo_log.prev_version_.IsValid()) {
+        UpdateUndoLink(rid, undo_log.prev_version_);
+      } else {
+        UpdateUndoLink(rid, std::nullopt);
+      }
+    }
+  }
+
+  {
+    std::unique_lock<std::shared_mutex> lck(txn_map_mutex_);
+    txn->state_ = TransactionState::ABORTED;
+    running_txns_.RemoveTxn(txn->read_ts_);
+  }
 }
 
 void TransactionManager::GarbageCollection() {

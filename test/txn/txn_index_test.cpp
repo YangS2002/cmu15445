@@ -14,7 +14,7 @@ namespace bustub {
 
 // NOLINTBEGIN(bugprone-unchecked-optional-access)
 
-TEST(TxnIndexTest, DISABLED_IndexInsertTest) {  // NOLINT
+TEST(TxnIndexTest, _IndexInsertTest) {  // NOLINT
   auto bustub = std::make_unique<BusTubInstance>();
   const std::string query = "SELECT * FROM maintable";
 
@@ -83,7 +83,7 @@ TEST(TxnIndexTest, DISABLED_IndexInsertTest) {  // NOLINT
                                 }));
 }
 
-TEST(TxnIndexTest, DISABLED_InsertDeleteTest) {  // NOLINT
+TEST(TxnIndexTest, _InsertDeleteTest) {  // NOLINT
   const std::string query = "SELECT * FROM maintable";
 
   auto bustub = std::make_unique<BusTubInstance>();
@@ -115,7 +115,7 @@ TEST(TxnIndexTest, DISABLED_InsertDeleteTest) {  // NOLINT
                                     IntResult{{1, 0}, {2, 0}, {3, 0}, {4, 0}}));
 }
 
-TEST(TxnIndexTest, DISABLED_UpdateTest) {  // NOLINT
+TEST(TxnIndexTest, _UpdateTest) {  // NOLINT
   const std::string query = "SELECT * FROM maintable";
 
   const auto prepare =
@@ -212,7 +212,7 @@ TEST(TxnIndexTest, DISABLED_UpdateTest) {  // NOLINT
   // hidden tests...
 }
 
-TEST(GradingTxnIndexTest, DISABLED_IndexUpdateConflictTest) {  // NOLINT
+TEST(GradingTxnIndexTest, _IndexUpdateConflictTest) {  // NOLINT
   const std::string query = "SELECT * FROM maintable";
 
   auto bustub = std::make_unique<BusTubInstance>();
@@ -236,7 +236,7 @@ TEST(GradingTxnIndexTest, DISABLED_IndexUpdateConflictTest) {  // NOLINT
   // hidden tests...
 }
 
-TEST(TxnIndexTest, DISABLED_UpdatePrimaryKeyTest) {  // NOLINT
+TEST(TxnIndexTest, UpdatePrimaryKeyTest) {  // NOLINT
   const std::string query = "SELECT * FROM maintable";
 
   auto bustub = std::make_unique<BusTubInstance>();
@@ -263,9 +263,114 @@ TEST(TxnIndexTest, DISABLED_UpdatePrimaryKeyTest) {  // NOLINT
   WithTxn(txn3, QueryIndex(*bustub, _var, _txn, query, "col1", std::vector<int>{0, 1, 2, 3, 4, 5},
                            IntResult{{0, 0}, {1, 0}, {2, 0}, {3, 0}, {}, {}}));
   WithTxn(txn3, CommitTxn(*bustub, _var, _txn));
+
   // hidden tests...
+
+  auto txn1_reverify = BeginTxn(*bustub, "txn1_reverify");
+
+  auto txn2_reverify = BeginTxn(*bustub, "txn2_reverify");
+  auto txn3_reverify = BeginTxn(*bustub, "txn3_reverify");
+
+  auto txn4 = BeginTxn(*bustub, "txn4");
+  WithTxn(txn4, ExecuteTxn(*bustub, _var, _txn, "UPDATE maintable SET col1 = col1 + 10"));
+  WithTxn(txn4, QueryShowResult(*bustub, _var, _txn, query, IntResult{{10, 0}, {11, 0}, {12, 0}, {13, 0}}));
+  WithTxn(txn4, QueryIndex(*bustub, _var, _txn, query, "col1", std::vector<int>{0, 1, 2, 3, 4, 5, 10, 11, 12, 13},
+                           IntResult{{}, {}, {}, {}, {}, {}, {10, 0}, {11, 0}, {12, 0}, {13, 0}}));
+  WithTxn(txn4, CommitTxn(*bustub, _var, _txn));
+  TxnMgrDbg("after txn4 update", bustub->txn_manager_.get(), table_info.get(), table_info->table_.get());
+
+  auto txn4_reverify = BeginTxn(*bustub, "txn4_reverify");
+
+  auto txn5 = BeginTxn(*bustub, "txn5");
+  WithTxn(txn5, ExecuteTxn(*bustub, _var, _txn, "UPDATE maintable SET col1 = col1, col2 = 1"));
+  WithTxn(txn5, QueryShowResult(*bustub, _var, _txn, query, IntResult{{10, 1}, {11, 1}, {12, 1}, {13, 1}}));
+  WithTxn(txn5, QueryIndex(*bustub, _var, _txn, query, "col1", std::vector<int>{0, 1, 2, 3, 4, 5, 10, 11, 12, 13},
+                           IntResult{{}, {}, {}, {}, {}, {}, {10, 1}, {11, 1}, {12, 1}, {13, 1}}));
+  WithTxn(txn5, CommitTxn(*bustub, _var, _txn));
+  TxnMgrDbg("after txn5 update", bustub->txn_manager_.get(), table_info.get(), table_info->table_.get());
+
+  auto txn5_reverify = BeginTxn(*bustub, "txn5_reverify");
+
+  auto txn6 = BeginTxn(*bustub, "txn6");
+  WithTxn(txn6, QueryShowResult(*bustub, _var, _txn, query, IntResult{{10, 1}, {11, 1}, {12, 1}, {13, 1}}));
+
+  // 这一句在线上会触发：
+  // Exception Type :: Execution, Message :: Failed to insert entry into index
+  WithTxn(txn6, ExecuteTxnTainted(*bustub, _var, _txn, "UPDATE maintable SET col1 = 1"));
+  TxnMgrDbg("after txn6 tainted", bustub->txn_manager_.get(), table_info.get(), table_info->table_.get());
+
+  // 下面两句就是最像线上隐藏测试的复现点：
+  WithTxn(txn1_reverify, QueryShowResult(*bustub, _var, _txn, query, IntResult{{0, 0}, {1, 0}, {2, 0}, {3, 0}}));
+  WithTxn(txn1_reverify, QueryIndex(*bustub, _var, _txn, query, "col1", std::vector<int>{0, 1, 2, 3, 4, 5},
+                                    IntResult{{0, 0}, {1, 0}, {2, 0}, {3, 0}, {}, {}}));
+
+  // 也可以顺手把其他 reverify 补上，方便定位到底哪个 read_ts 会挂
+  WithTxn(txn2_reverify, QueryShowResult(*bustub, _var, _txn, query, IntResult{{0, 0}, {1, 0}, {2, 0}, {3, 0}}));
+  WithTxn(txn2_reverify, QueryIndex(*bustub, _var, _txn, query, "col1", std::vector<int>{0, 1, 2, 3, 4, 5},
+                                    IntResult{{0, 0}, {1, 0}, {2, 0}, {3, 0}, {}, {}}));
+
+  WithTxn(txn3_reverify, QueryShowResult(*bustub, _var, _txn, query, IntResult{{0, 0}, {1, 0}, {2, 0}, {3, 0}}));
+  WithTxn(txn3_reverify, QueryIndex(*bustub, _var, _txn, query, "col1", std::vector<int>{0, 1, 2, 3, 4, 5},
+                                    IntResult{{0, 0}, {1, 0}, {2, 0}, {3, 0}, {}, {}}));
+
+  WithTxn(txn4_reverify, QueryShowResult(*bustub, _var, _txn, query, IntResult{{10, 0}, {11, 0}, {12, 0}, {13, 0}}));
+  WithTxn(txn4_reverify, QueryIndex(*bustub, _var, _txn, query, "col1", std::vector<int>{10, 11, 12, 13},
+                                    IntResult{{10, 0}, {11, 0}, {12, 0}, {13, 0}}));
+
+  WithTxn(txn5_reverify, QueryShowResult(*bustub, _var, _txn, query, IntResult{{10, 1}, {11, 1}, {12, 1}, {13, 1}}));
+  WithTxn(txn5_reverify, QueryIndex(*bustub, _var, _txn, query, "col1", std::vector<int>{10, 11, 12, 13},
+                                    IntResult{{10, 1}, {11, 1}, {12, 1}, {13, 1}}));
 }
 
+TEST(TxnIndexTest, ReverifyReadTs5ShouldNotSeeOldOne) {  // NOLINT
+  const std::string query = "SELECT * FROM maintable";
+
+  auto bustub = std::make_unique<BusTubInstance>();
+  EnsureIndexScan(*bustub);
+  Execute(*bustub, "CREATE TABLE maintable(col1 int primary key, col2 int)");
+  auto table_info = bustub->catalog_->GetTable("maintable");
+
+  auto txn1 = BeginTxn(*bustub, "txn1");
+  WithTxn(txn1, ExecuteTxn(*bustub, _var, _txn, "INSERT INTO maintable VALUES (1, 0), (2, 0), (3, 0), (4, 0)"));
+  WithTxn(txn1, CommitTxn(*bustub, _var, _txn));
+  TxnMgrDbg("after txn1 insert", bustub->txn_manager_.get(), table_info.get(), table_info->table_.get());
+
+  auto txn1_reverify = BeginTxn(*bustub, "txn1_reverify");
+
+  auto txn2 = BeginTxn(*bustub, "txn2");
+  WithTxn(txn2, ExecuteTxn(*bustub, _var, _txn, "UPDATE maintable SET col1 = col1 + 1"));
+  WithTxn(txn2, CommitTxn(*bustub, _var, _txn));
+  TxnMgrDbg("after txn2 update", bustub->txn_manager_.get(), table_info.get(), table_info->table_.get());
+
+  auto txn2_reverify = BeginTxn(*bustub, "txn2_reverify");
+
+  auto txn3 = BeginTxn(*bustub, "txn3");
+  WithTxn(txn3, ExecuteTxn(*bustub, _var, _txn, "UPDATE maintable SET col1 = col1 - 2"));
+  WithTxn(txn3, CommitTxn(*bustub, _var, _txn));
+  TxnMgrDbg("after txn3 update", bustub->txn_manager_.get(), table_info.get(), table_info->table_.get());
+
+  auto txn3_reverify = BeginTxn(*bustub, "txn3_reverify");
+
+  auto txn4 = BeginTxn(*bustub, "txn4");
+  WithTxn(txn4, ExecuteTxn(*bustub, _var, _txn, "UPDATE maintable SET col1 = col1 + 10"));
+  WithTxn(txn4, CommitTxn(*bustub, _var, _txn));
+  TxnMgrDbg("after txn4 update", bustub->txn_manager_.get(), table_info.get(), table_info->table_.get());
+
+  // sanity: read_ts = 4
+  WithTxn(txn1_reverify, QueryShowResult(*bustub, _var, _txn, query, IntResult{{1, 0}, {2, 0}, {3, 0}, {4, 0}}));
+  WithTxn(txn1_reverify, QueryIndex(*bustub, _var, _txn, query, "col1", std::vector<int>{1, 2, 3, 4},
+                                    IntResult{{1, 0}, {2, 0}, {3, 0}, {4, 0}}));
+
+  // 关键复现点：read_ts = 5，不应该再看到 (1,0)
+  WithTxn(txn2_reverify, QueryShowResult(*bustub, _var, _txn, query, IntResult{{2, 0}, {3, 0}, {4, 0}, {5, 0}}));
+  WithTxn(txn2_reverify, QueryIndex(*bustub, _var, _txn, query, "col1", std::vector<int>{1, 2, 3, 4, 5},
+                                    IntResult{{}, {2, 0}, {3, 0}, {4, 0}, {5, 0}}));
+
+  // sanity: read_ts = 6
+  WithTxn(txn3_reverify, QueryShowResult(*bustub, _var, _txn, query, IntResult{{0, 0}, {1, 0}, {2, 0}, {3, 0}}));
+  WithTxn(txn3_reverify, QueryIndex(*bustub, _var, _txn, query, "col1", std::vector<int>{0, 1, 2, 3, 4, 5},
+                                    IntResult{{0, 0}, {1, 0}, {2, 0}, {3, 0}, {}, {}}));
+}
 // NOLINTEND(bugprone-unchecked-optional-access))
 
 }  // namespace bustub
