@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include "catalog/catalog.h"
 #include "catalog/schema.h"

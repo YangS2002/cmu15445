@@ -13,8 +13,8 @@
 #include "buffer/buffer_pool_manager.h"
 
 #include <algorithm>
-#include <future>
-#include <mutex>
+#include <future>  // NOLINT
+#include <mutex>   // NOLINT
 #include <optional>
 #include <shared_mutex>
 #include <unordered_map>
@@ -326,7 +326,7 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
 
     lock.unlock();
     return WritePageGuard(page_id, frame, replacer_, bpm_latch_);  // 创建guard时，依然
-                                                                   //是干净页
+                                                                   // 是干净页
   }
 }
 

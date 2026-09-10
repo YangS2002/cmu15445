@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include <condition_variable>
+#include <condition_variable>  // NOLINT
 #include <list>
 #include <memory>
 #include <shared_mutex>

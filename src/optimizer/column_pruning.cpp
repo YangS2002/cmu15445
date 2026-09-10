@@ -19,7 +19,6 @@
 #include "execution/plans/abstract_plan.h"
 #include "execution/plans/aggregation_plan.h"
 #include "execution/plans/projection_plan.h"
-#include "optimizer/optimizer.h"
 // column_pruning.cpp
 
 namespace bustub {

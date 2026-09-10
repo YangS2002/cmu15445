@@ -9,6 +9,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "storage/page/b_plus_tree_internal_page.h"
+
+#include <netdb.h>
+
 #include <cstddef>
 #include <cstring>
 #include <iostream>
@@ -16,11 +20,9 @@
 #include <sstream>
 #include <utility>
 
-#include <netdb.h>
 #include "common/config.h"
 #include "common/exception.h"
 #include "fmt/core.h"
-#include "storage/page/b_plus_tree_internal_page.h"
 
 #include "storage/page/b_plus_tree_leaf_page.h"
 #include "storage/page/b_plus_tree_page.h"

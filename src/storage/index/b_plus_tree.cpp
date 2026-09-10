@@ -5,7 +5,7 @@
 #include <iterator>
 #include <optional>
 #include <ostream>
-#include <thread>
+#include <thread>  // NOLINT
 #include <utility>
 #include "common/config.h"
 #include "common/exception.h"
@@ -316,7 +316,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value) -> bool 
     // 插入结束
     return true;
   }
-  //页没满，直接插入
+  // 页没满，直接插入
   target_leaf_page->InsertKeyAt(key, value, insert_pos);
 
   return true;
@@ -362,7 +362,7 @@ auto BPLUSTREE_TYPE::CoalesceOrRedistributeInternal(WritePageGuard &&internal_pa
       internal_node->MoveDataTo(*brother_page, 0, internal_node->GetSize(), brother_page->GetSize());
       auto cur_page_index_in_father_node = father_node->ValueIndex(internal_page_id);  // 当前节点在父节点中位置
       father_node->ArrayShift(cur_page_index_in_father_node, 1,
-                              true);  //删除祖父节点中当前节点的键值对,左移会覆盖掉当前节点的键值对
+                              true);  // 删除祖父节点中当前节点的键值对,左移会覆盖掉当前节点的键值对
     } else {
       // 右兄弟的值更大，合并后应该删除父节点中右兄弟的键值
       brother_page->MoveDataTo(*internal_node, 0, brother_page->GetSize(),
@@ -370,7 +370,7 @@ auto BPLUSTREE_TYPE::CoalesceOrRedistributeInternal(WritePageGuard &&internal_pa
       auto cur_page_index_in_father_node =
           father_node->ValueIndex(brother_page_guard.GetPageId());  // 右兄弟在父节点中位置
       father_node->ArrayShift(cur_page_index_in_father_node, 1,
-                              true);  //删除祖父节点中右兄弟的键值对,左移会覆盖掉右兄弟的键值对
+                              true);  // 删除祖父节点中右兄弟的键值对,左移会覆盖掉右兄弟的键值对
     }
   } else {
     // 进行重组
@@ -456,7 +456,7 @@ auto BPLUSTREE_TYPE::CoalesceOrRedistributeLeaf(WritePageGuard &&leaf_page, page
       brother_node->SetNextPageId(leaf_node->GetNextPageId());
       // 删除父节点中当前节点的占位键值对
       auto cur_page_index_in_father_node = father_node->ValueIndex(leaf_node_id);
-      father_node->ArrayShift(cur_page_index_in_father_node, 1, true);  //左移覆盖掉当前节点的占位键值对
+      father_node->ArrayShift(cur_page_index_in_father_node, 1, true);  // 左移覆盖掉当前节点的占位键值对
 
     } else {
       // 将右兄弟节点合并到当前节点中，并将当前节点的next_page_id指向右兄弟节点的next_page_id
@@ -464,7 +464,7 @@ auto BPLUSTREE_TYPE::CoalesceOrRedistributeLeaf(WritePageGuard &&leaf_page, page
       leaf_node->SetNextPageId(brother_node->GetNextPageId());
       // 删除父节点中右兄弟节点的占位键值对
       auto brother_page_index_in_father_node = father_node->ValueIndex(brother_page_id.value());
-      father_node->ArrayShift(brother_page_index_in_father_node, 1, true);  //左移覆盖掉右兄弟节点的占位键值对
+      father_node->ArrayShift(brother_page_index_in_father_node, 1, true);  // 左移覆盖掉右兄弟节点的占位键值对
     }
   } else {
     // 进行重组

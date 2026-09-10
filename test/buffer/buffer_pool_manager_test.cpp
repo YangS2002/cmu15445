@@ -14,7 +14,7 @@
 #include <cstring>
 #include <deque>
 #include <filesystem>
-#include <thread>
+#include <thread>  // NOLINT
 
 #include "buffer/buffer_pool_manager.h"
 #include "gtest/gtest.h"

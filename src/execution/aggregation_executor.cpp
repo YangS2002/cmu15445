@@ -69,7 +69,7 @@ auto AggregationExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
   is_done_ = true;
   if (aht_iterator_ == aht_.End() && is_empty_ && plan_->group_bys_.empty()) {
-    //如果没有order by, 返回初始值，
+    // 如果没有order by, 返回初始值，
     std::vector<Value> results;
     // agg
     auto agg_types = plan_->GetAggregateTypes();

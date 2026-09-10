@@ -14,7 +14,7 @@
 #include <cstring>
 #include <future>  // NOLINT
 #include <memory>
-#include <thread>
+#include <thread>  // NOLINT
 #include "common/exception.h"
 #include "gtest/gtest.h"
 #include "storage/disk/disk_manager_memory.h"

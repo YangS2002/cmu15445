@@ -13,7 +13,7 @@
 #include "buffer/lru_k_replacer.h"
 #include <cstddef>
 #include <cstdint>
-#include <mutex>
+#include <mutex>  // NOLINT
 #include <optional>
 #include <unordered_map>
 #include <utility>

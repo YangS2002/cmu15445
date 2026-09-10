@@ -14,7 +14,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 #include <iostream>
-#include <mutex>
+#include <mutex>  // NOLINT
 #include <utility>
 #include "buffer/lru_k_replacer.h"
 #include "common/config.h"

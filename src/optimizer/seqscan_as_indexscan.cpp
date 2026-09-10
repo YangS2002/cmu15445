@@ -100,8 +100,7 @@ auto IsOrExpressionWithTargetCol(const LogicExpression &expr, const std::vector<
 
   std::vector<AbstractExpressionRef> child_exprs;
   auto left_child = dynamic_cast<const LogicExpression *>(expr.GetChildAt(0).get());
-  if (left_child != nullptr)  // Or逻辑表达式至少有两个孩子节点
-  {
+  if (left_child != nullptr) {  // Or逻辑表达式至少有两个孩子节点
     child_exprs = IsOrExpressionWithTargetCol(*left_child, indices, table_schema, target_col_name);
     if (child_exprs.empty()) {
       // 右子树不满足条件

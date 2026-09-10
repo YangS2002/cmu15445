@@ -112,8 +112,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     };
     bool ok = UpdateTupleAndUndoLink(txn_manager, cur_rid, new_undo_link, table_info->table_.get(), txn, new_meta,
                                      base_tuple,  // delete 通常不改 tuple 内容，只改 meta
-                                     check_func   // 当前任务单线程，直接传 nullptr
-    );
+                                     check_func);  // 当前任务单线程，直接传 nullptr
 
     // 3.2 删除索引
     for (auto &index : indeies) {

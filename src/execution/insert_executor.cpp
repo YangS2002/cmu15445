@@ -112,10 +112,9 @@ auto InsertExecutor::InsertWithReviv(const TupleMeta &meta, const Tuple &tuple, 
         GenerateNewUndoLog(&table_info_->schema_, &old_tuple, &tuple, meta.ts_, undo_link_header_opt.value());
     new_undo_log.is_deleted_ = meta.is_deleted_;
     new_undo_link = txn_->AppendUndoLog(new_undo_log);
-  }
-  // 2. 当前事务没有这条RID的Undolog，但是这个RID是当前事务删除的，说明是insert->delete这种删除,
-  // 那这次插入依然是一个没有Undo的插入
-  else if (!undo_link_header_opt.has_value() && meta.ts_ == txn_->GetTransactionId()) {
+  } else if (!undo_link_header_opt.has_value() && meta.ts_ == txn_->GetTransactionId()) {
+    // 2. 当前事务没有这条RID的Undolog，但是这个RID是当前事务删除的，说明是insert->delete这种删除,
+    // 那这次插入依然是一个没有Undo的插入
     // 之前一定是删除undolog
     // 不生成任何元组和Undo
   } else {
