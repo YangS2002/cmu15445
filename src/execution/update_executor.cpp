@@ -320,9 +320,13 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     visible_tuples.push_back(child_tuple);
   }
 
+  // 匹配 0 行是合法的 SQL 语义（例如 WHERE 条件把全部行都筛掉），不是写写冲突。
+  // 这里绝不能 SetTainted / 抛异常，否则会把正常的"空更新"当成错误，导致 commit 被拒或整个 SQL 崩溃。
+  // 直接返回受影响行数 0 即可。
   if (saved_rids.empty()) {
-    txn->SetTainted();
-    throw ExecutionException("update matched zero rows under concurrent index scan");
+    is_done_ = true;
+    *tuple = Tuple({Value(TypeId::INTEGER, 0)}, &plan_->OutputSchema());
+    return true;
   }
   CheckWriteWriteConflict(visible_tuples, saved_rids, txn, txn_manager);
 
@@ -401,9 +405,6 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         throw ExecutionException("Failed to insert entry into index");
       }
     }
-  }
-  if (saved_rids.empty()) {
-    fmt::println(stderr, "[ZERO UPDATE] txn={} read_ts={}", txn->GetTransactionId(), txn->GetReadTs());
   }
   is_done_ = true;
   *tuple = Tuple({Value(TypeId::INTEGER, static_cast<int>(saved_rids.size()))}, &plan_->OutputSchema());
