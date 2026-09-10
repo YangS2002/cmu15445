@@ -419,8 +419,8 @@ TEST(TxnScanTest, ScanTest) {  // NOLINT
   // a column of null.
 
   query = "SELECT a FROM maintable";
-  // fmt::println(stderr, "C: Verify txn2");
-  // WithTxn(txn2, QueryHideResult(*bustub, _var, _txn, query, IntResult{})); // <- you will need to fill in the answer
+  fmt::println(stderr, "C: Verify txn2");
+  WithTxn(txn2, QueryHideResult(*bustub, _var, _txn, query, IntResult{{2}, {6}}));
   fmt::println(stderr, "D: Verify txn3");
   WithTxn(txn3, QueryHideResult(*bustub, _var, _txn, query,
                                 IntResult{{2}, {3}, {5}}));  // <- you will need to fill in the answer
@@ -428,7 +428,7 @@ TEST(TxnScanTest, ScanTest) {  // NOLINT
   WithTxn(txn4, QueryHideResult(*bustub, _var, _txn, query,
                                 IntResult{{1}, {3}, {6}}));  // <- you will need to fill in the answer
   fmt::println(stderr, "F: Verify txn5");
-  WithTxn(txn5, QueryHideResult(*bustub, _var, _txn, query, IntResult{}));  // <- you will need to fill in the answer
+  WithTxn(txn5, QueryHideResult(*bustub, _var, _txn, query, IntResult{{2}, {3}, {6}}));
 }
 
 // NOLINTEND(bugprone-unchecked-optional-access))
